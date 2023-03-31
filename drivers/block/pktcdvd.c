@@ -343,7 +343,7 @@ static void class_pktcdvd_release(struct class *cls)
 	kfree(cls);
 }
 
-static ssize_t device_map_show(struct class *c, struct class_attribute *attr,
+static ssize_t device_map_show(const struct class *c, const struct class_attribute *attr,
 			       char *data)
 {
 	int n = 0;
@@ -364,7 +364,7 @@ static ssize_t device_map_show(struct class *c, struct class_attribute *attr,
 }
 static CLASS_ATTR_RO(device_map);
 
-static ssize_t add_store(struct class *c, struct class_attribute *attr,
+static ssize_t add_store(const struct class *c, const struct class_attribute *attr,
 			 const char *buf, size_t count)
 {
 	unsigned int major, minor;
@@ -385,7 +385,7 @@ static ssize_t add_store(struct class *c, struct class_attribute *attr,
 }
 static CLASS_ATTR_WO(add);
 
-static ssize_t remove_store(struct class *c, struct class_attribute *attr,
+static ssize_t remove_store(const struct class *c, const struct class_attribute *attr,
 			    const char *buf, size_t count)
 {
 	unsigned int major, minor;
@@ -417,7 +417,6 @@ static int pkt_sysfs_init(void)
 	if (!class_pktcdvd)
 		return -ENOMEM;
 	class_pktcdvd->name = DRIVER_NAME;
-	class_pktcdvd->owner = THIS_MODULE;
 	class_pktcdvd->class_release = class_pktcdvd_release;
 	class_pktcdvd->class_groups = class_pktcdvd_groups;
 	ret = class_register(class_pktcdvd);
