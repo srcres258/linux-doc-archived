@@ -2053,7 +2053,7 @@ call_bind_status(struct rpc_task *task)
 		if (task->tk_rebind_retry == 0)
 			break;
 		task->tk_rebind_retry--;
-		rpc_delay(task, 3*HZ);
+		rpc_delay(task, RPC_CLNT_REBIND_DELAY * HZ);
 		goto retry_timeout;
 	case -ENOBUFS:
 		rpc_delay(task, HZ >> 2);
