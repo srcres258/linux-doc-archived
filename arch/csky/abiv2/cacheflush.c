@@ -12,6 +12,8 @@ void update_mmu_cache(struct vm_area_struct *vma, unsigned long address,
 	unsigned long addr;
 	struct page *page;
 
+	flush_tlb_page(vma, address);
+
 	if (!pfn_valid(pte_pfn(*pte)))
 		return;
 
