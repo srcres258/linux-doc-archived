@@ -108,7 +108,7 @@ static inline const __be32 *__of_get_address(struct device_node *dev, int index,
 	return NULL;
 }
 
-static int of_property_read_reg(struct device_node *np, int idx, u64 *addr, u64 *size)
+static inline int of_property_read_reg(struct device_node *np, int idx, u64 *addr, u64 *size)
 {
 	return -ENOSYS;
 }
