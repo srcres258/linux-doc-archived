@@ -203,7 +203,7 @@ static bool try_release_thread_stack_to_cache(struct vm_struct *vm)
 	unsigned int i;
 
 	for (i = 0; i < NR_CACHED_STACKS; i++) {
-		if (this_cpu_cmpxchg(cached_stacks[i], NULL, vm) != NULL)
+		if (this_cpu_cmpxchg_local(cached_stacks[i], NULL, vm) != NULL)
 			continue;
 		return true;
 	}
@@ -753,6 +753,7 @@ static __latent_entropy int dup_mmap(struct mm_struct *mm,
 		if (vma_iter_bulk_store(&vmi, tmp))
 			goto fail_nomem_vmi_store;
 
+		ksm_add_vma(tmp);
 		mm->map_count++;
 		if (!(tmp->vm_flags & VM_WIPEONFORK))
 			retval = copy_page_range(tmp, mpnt);
