@@ -541,7 +541,7 @@ int mhi_qaic_ctrl_init(void)
 		return ret;
 
 	mqc_dev_major = ret;
-	mqc_dev_class = class_create(THIS_MODULE, MHI_QAIC_CTRL_DRIVER_NAME);
+	mqc_dev_class = class_create(MHI_QAIC_CTRL_DRIVER_NAME);
 	if (IS_ERR(mqc_dev_class)) {
 		ret = PTR_ERR(mqc_dev_class);
 		goto unregister_chrdev;
