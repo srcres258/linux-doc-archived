@@ -644,6 +644,7 @@ enum ocelot_tag_prefix {
 };
 
 struct ocelot;
+struct device_node;
 
 struct ocelot_ops {
 	struct net_device *(*port_to_netdev)(struct ocelot *ocelot, int port);
@@ -939,15 +940,17 @@ struct ocelot_policer {
 	__ocelot_target_write_ix(ocelot, target, val, reg, 0)
 
 /* I/O */
-u32 ocelot_port_readl(struct ocelot_port *port, u32 reg);
-void ocelot_port_writel(struct ocelot_port *port, u32 val, u32 reg);
-void ocelot_port_rmwl(struct ocelot_port *port, u32 val, u32 mask, u32 reg);
-int __ocelot_bulk_read_ix(struct ocelot *ocelot, u32 reg, u32 offset, void *buf,
-			  int count);
-u32 __ocelot_read_ix(struct ocelot *ocelot, u32 reg, u32 offset);
-void __ocelot_write_ix(struct ocelot *ocelot, u32 val, u32 reg, u32 offset);
-void __ocelot_rmw_ix(struct ocelot *ocelot, u32 val, u32 mask, u32 reg,
-		     u32 offset);
+u32 ocelot_port_readl(struct ocelot_port *port, enum ocelot_reg reg);
+void ocelot_port_writel(struct ocelot_port *port, u32 val, enum ocelot_reg reg);
+void ocelot_port_rmwl(struct ocelot_port *port, u32 val, u32 mask,
+		      enum ocelot_reg reg);
+int __ocelot_bulk_read_ix(struct ocelot *ocelot, enum ocelot_reg reg,
+			  u32 offset, void *buf, int count);
+u32 __ocelot_read_ix(struct ocelot *ocelot, enum ocelot_reg reg, u32 offset);
+void __ocelot_write_ix(struct ocelot *ocelot, u32 val, enum ocelot_reg reg,
+		       u32 offset);
+void __ocelot_rmw_ix(struct ocelot *ocelot, u32 val, u32 mask,
+		     enum ocelot_reg reg, u32 offset);
 u32 __ocelot_target_read_ix(struct ocelot *ocelot, enum ocelot_target target,
 			    u32 reg, u32 offset);
 void __ocelot_target_write_ix(struct ocelot *ocelot, enum ocelot_target target,
@@ -1111,6 +1114,12 @@ int ocelot_sb_occ_tc_port_bind_get(struct ocelot *ocelot, int port,
 				   enum devlink_sb_pool_type pool_type,
 				   u32 *p_cur, u32 *p_max);
 
+int ocelot_port_configure_serdes(struct ocelot *ocelot, int port,
+				 struct device_node *portnp);
+
+void ocelot_phylink_mac_config(struct ocelot *ocelot, int port,
+			       unsigned int link_an_mode,
+			       const struct phylink_link_state *state);
 void ocelot_phylink_mac_link_down(struct ocelot *ocelot, int port,
 				  unsigned int link_an_mode,
 				  phy_interface_t interface,
@@ -1182,5 +1191,7 @@ ocelot_mrp_del_ring_role(struct ocelot *ocelot, int port,
 	return -EOPNOTSUPP;
 }
 #endif
+
+void ocelot_pll5_init(struct ocelot *ocelot);
 
 #endif
