@@ -240,8 +240,9 @@ iwl_mvm_scan_type _iwl_mvm_get_scan_type(struct iwl_mvm *mvm,
 		 * set all scan requests as fast-balance scan
 		 */
 		if (vif && vif->type == NL80211_IFTYPE_STATION &&
-		    vif->bss_conf.dtim_period < 220 &&
-		    data.is_dcm_with_p2p_go)
+		    data.is_dcm_with_p2p_go &&
+		    ((vif->bss_conf.beacon_int *
+		      vif->bss_conf.dtim_period) < 220))
 			return IWL_SCAN_TYPE_FAST_BALANCE;
 	}
 
@@ -2081,6 +2082,11 @@ static u8 iwl_mvm_scan_umac_flags2(struct iwl_mvm *mvm,
 				IWL_UMAC_SCAN_GEN_PARAMS_FLAGS2_RESPECT_P2P_GO_HB;
 	}
 
+	if (params->scan_6ghz &&
+	    fw_has_capa(&mvm->fw->ucode_capa,
+			IWL_UCODE_TLV_CAPA_SCAN_DONT_TOGGLE_ANT))
+		flags |= IWL_UMAC_SCAN_GEN_PARAMS_FLAGS2_DONT_TOGGLE_ANT;
+
 	return flags;
 }
 
@@ -2292,7 +2298,7 @@ iwl_mvm_scan_umac_fill_general_p_v11(struct iwl_mvm *mvm,
 
 	iwl_mvm_scan_umac_dwell_v11(mvm, gp, params);
 
-	IWL_DEBUG_SCAN(mvm, "Gerenal: flags=0x%x, flags2=0x%x\n",
+	IWL_DEBUG_SCAN(mvm, "General: flags=0x%x, flags2=0x%x\n",
 		       gen_flags, gen_flags2);
 
 	gp->flags = cpu_to_le16(gen_flags);
