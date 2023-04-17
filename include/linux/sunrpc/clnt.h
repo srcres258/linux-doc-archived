@@ -162,6 +162,9 @@ struct rpc_add_xprt_test {
 #define RPC_CLNT_CREATE_REUSEPORT	(1UL << 11)
 #define RPC_CLNT_CREATE_CONNECTED	(1UL << 12)
 
+#define	RPC_CLNT_REBIND_DELAY		3
+#define	RPC_CLNT_REBIND_MAX_TIMEOUT	90
+
 struct rpc_clnt *rpc_create(struct rpc_create_args *args);
 struct rpc_clnt	*rpc_bind_new_program(struct rpc_clnt *,
 				const struct rpc_program *, u32);
