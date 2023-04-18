@@ -225,8 +225,6 @@ static bool remove_migration_pte(struct folio *folio,
 			pte = maybe_mkwrite(pte, vma);
 		else if (pte_swp_uffd_wp(*pvmw.pte))
 			pte = pte_mkuffd_wp(pte);
-		else
-			pte = pte_wrprotect(pte);
 
 		if (folio_test_anon(folio) && !is_readable_migration_entry(entry))
 			rmap_flags |= RMAP_EXCLUSIVE;
@@ -1712,6 +1710,9 @@ static int migrate_pages_batch(struct list_head *from, new_page_t get_new_page,
 							large_retry++;
 							thp_retry += is_thp;
 							nr_retry_pages += nr_pages;
+							/* Undo duplicated failure counting. */
+							nr_large_failed--;
+							stats->nr_thp_failed -= is_thp;
 							break;
 						}
 					}
