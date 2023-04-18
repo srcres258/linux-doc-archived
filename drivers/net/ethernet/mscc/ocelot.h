@@ -74,6 +74,15 @@ struct ocelot_multicast {
 	struct ocelot_pgid *pgid;
 };
 
+static inline void ocelot_reg_to_target_addr(struct ocelot *ocelot,
+					     enum ocelot_reg reg,
+					     enum ocelot_target *target,
+					     u32 *addr)
+{
+	*target = reg >> TARGET_OFFSET;
+	*addr = ocelot->map[*target][reg & REG_MASK];
+}
+
 int ocelot_bridge_num_find(struct ocelot *ocelot,
 			   const struct net_device *bridge);
 
@@ -110,6 +119,9 @@ int ocelot_stats_init(struct ocelot *ocelot);
 void ocelot_stats_deinit(struct ocelot *ocelot);
 
 int ocelot_mm_init(struct ocelot *ocelot);
+void ocelot_port_change_fp(struct ocelot *ocelot, int port,
+			   unsigned long preemptible_tcs);
+void ocelot_port_update_active_preemptible_tcs(struct ocelot *ocelot, int port);
 
 extern struct notifier_block ocelot_netdevice_nb;
 extern struct notifier_block ocelot_switchdev_nb;

@@ -345,18 +345,12 @@ struct sk_buff_head {
 
 struct sk_buff;
 
-/* To allow 64K frame to be packed as single skb without frag_list we
- * require 64K/PAGE_SIZE pages plus 1 additional page to allow for
- * buffers which do not start on a page boundary.
- *
- * Since GRO uses frags we allocate at least 16 regardless of page
- * size.
- */
-#if (65536/PAGE_SIZE + 1) < 16
-#define MAX_SKB_FRAGS 16UL
-#else
-#define MAX_SKB_FRAGS (65536/PAGE_SIZE + 1)
+#ifndef CONFIG_MAX_SKB_FRAGS
+# define CONFIG_MAX_SKB_FRAGS 17
 #endif
+
+#define MAX_SKB_FRAGS CONFIG_MAX_SKB_FRAGS
+
 extern int sysctl_max_skb_frags;
 
 /* Set skb_shinfo(skb)->gso_size to this in case you want skb_segment to
@@ -810,7 +804,6 @@ typedef unsigned char *sk_buff_data_t;
  *	@csum_level: indicates the number of consecutive checksums found in
  *		the packet minus one that have been verified as
  *		CHECKSUM_UNNECESSARY (max 3)
- *	@scm_io_uring: SKB holds io_uring registered files
  *	@dst_pending_confirm: need to confirm neighbour
  *	@decrypted: Decrypted SKB
  *	@slow_gro: state present at GRO time, slower prepare step required
@@ -945,6 +938,19 @@ struct sk_buff {
 	__u8			ip_summed:2;
 	__u8			ooo_okay:1;
 
+	/* private: */
+	__u8			__mono_tc_offset[0];
+	/* public: */
+	__u8			mono_delivery_time:1;	/* See SKB_MONO_DELIVERY_TIME_MASK */
+#ifdef CONFIG_NET_CLS_ACT
+	__u8			tc_at_ingress:1;	/* See TC_AT_INGRESS_MASK */
+	__u8			tc_skip_classify:1;
+#endif
+	__u8			remcsum_offload:1;
+	__u8			csum_complete_sw:1;
+	__u8			csum_level:2;
+	__u8			dst_pending_confirm:1;
+
 	__u8			l4_hash:1;
 	__u8			sw_hash:1;
 	__u8			wifi_acked_valid:1;
@@ -954,19 +960,6 @@ struct sk_buff {
 	__u8			encapsulation:1;
 	__u8			encap_hdr_csum:1;
 	__u8			csum_valid:1;
-
-	/* private: */
-	__u8			__pkt_vlan_present_offset[0];
-	/* public: */
-	__u8			remcsum_offload:1;
-	__u8			csum_complete_sw:1;
-	__u8			csum_level:2;
-	__u8			dst_pending_confirm:1;
-	__u8			mono_delivery_time:1;	/* See SKB_MONO_DELIVERY_TIME_MASK */
-#ifdef CONFIG_NET_CLS_ACT
-	__u8			tc_skip_classify:1;
-	__u8			tc_at_ingress:1;	/* See TC_AT_INGRESS_MASK */
-#endif
 #ifdef CONFIG_IPV6_NDISC_NODETYPE
 	__u8			ndisc_nodetype:2;
 #endif
@@ -989,7 +982,6 @@ struct sk_buff {
 #endif
 	__u8			slow_gro:1;
 	__u8			csum_not_inet:1;
-	__u8			scm_io_uring:1;
 
 #ifdef CONFIG_NET_SCHED
 	__u16			tc_index;	/* traffic control index */
@@ -1074,13 +1066,13 @@ struct sk_buff {
  * around, you also must adapt these constants.
  */
 #ifdef __BIG_ENDIAN_BITFIELD
-#define TC_AT_INGRESS_MASK		(1 << 0)
-#define SKB_MONO_DELIVERY_TIME_MASK	(1 << 2)
+#define SKB_MONO_DELIVERY_TIME_MASK	(1 << 7)
+#define TC_AT_INGRESS_MASK		(1 << 6)
 #else
-#define TC_AT_INGRESS_MASK		(1 << 7)
-#define SKB_MONO_DELIVERY_TIME_MASK	(1 << 5)
+#define SKB_MONO_DELIVERY_TIME_MASK	(1 << 0)
+#define TC_AT_INGRESS_MASK		(1 << 1)
 #endif
-#define PKT_VLAN_PRESENT_OFFSET	offsetof(struct sk_buff, __pkt_vlan_present_offset)
+#define SKB_BF_MONO_TC_OFFSET		offsetof(struct sk_buff, __mono_tc_offset)
 
 #ifdef __KERNEL__
 /*
@@ -3394,6 +3386,18 @@ static inline void skb_frag_ref(struct sk_buff *skb, int f)
 	__skb_frag_ref(&skb_shinfo(skb)->frags[f]);
 }
 
+static inline void
+napi_frag_unref(skb_frag_t *frag, bool recycle, bool napi_safe)
+{
+	struct page *page = skb_frag_page(frag);
+
+#ifdef CONFIG_PAGE_POOL
+	if (recycle && page_pool_return_skb_page(page, napi_safe))
+		return;
+#endif
+	put_page(page);
+}
+
 /**
  * __skb_frag_unref - release a reference on a paged fragment.
  * @frag: the paged fragment
@@ -3404,13 +3408,7 @@ static inline void skb_frag_ref(struct sk_buff *skb, int f)
  */
 static inline void __skb_frag_unref(skb_frag_t *frag, bool recycle)
 {
-	struct page *page = skb_frag_page(frag);
-
-#ifdef CONFIG_PAGE_POOL
-	if (recycle && page_pool_return_skb_page(page))
-		return;
-#endif
-	put_page(page);
+	napi_frag_unref(frag, recycle, false);
 }
 
 /**
@@ -5071,12 +5069,12 @@ static inline u64 skb_get_kcov_handle(struct sk_buff *skb)
 #endif
 }
 
-#ifdef CONFIG_PAGE_POOL
 static inline void skb_mark_for_recycle(struct sk_buff *skb)
 {
+#ifdef CONFIG_PAGE_POOL
 	skb->pp_recycle = 1;
-}
 #endif
+}
 
 #endif	/* __KERNEL__ */
 #endif	/* _LINUX_SKBUFF_H */
