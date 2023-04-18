@@ -184,10 +184,7 @@ static u32 iwl_mvm_tx_csum(struct iwl_mvm *mvm, struct sk_buff *skb,
 			   struct ieee80211_tx_info *info,
 			   bool amsdu)
 {
-	if (mvm->trans->trans_cfg->device_family < IWL_DEVICE_FAMILY_BZ ||
-	    (mvm->trans->trans_cfg->device_family == IWL_DEVICE_FAMILY_BZ &&
-	     CSR_HW_REV_TYPE(mvm->trans->hw_rev) == IWL_CFG_MAC_TYPE_GL &&
-	     mvm->trans->hw_rev_step == SILICON_A_STEP))
+	if (!iwl_mvm_has_new_tx_csum(mvm))
 		return iwl_mvm_tx_csum_pre_bz(mvm, skb, info, amsdu);
 	return iwl_mvm_tx_csum_bz(mvm, skb, amsdu);
 }
@@ -332,22 +329,23 @@ static u32 iwl_mvm_get_tx_rate(struct iwl_mvm *mvm,
 			  sta ? iwl_mvm_sta_from_mac80211(sta)->sta_state : -1);
 
 		rate_idx = info->control.rates[0].idx;
+
+		/* For non 2 GHZ band, remap mac80211 rate indices into driver
+		 * indices.
+		 */
+		if (info->band != NL80211_BAND_2GHZ ||
+		    (info->flags & IEEE80211_TX_CTL_NO_CCK_RATE))
+			rate_idx += IWL_FIRST_OFDM_RATE;
+
+		/* For 2.4 GHZ band, check that there is no need to remap */
+		BUILD_BUG_ON(IWL_FIRST_CCK_RATE != 0);
 	}
 
 	/* if the rate isn't a well known legacy rate, take the lowest one */
 	if (rate_idx < 0 || rate_idx >= IWL_RATE_COUNT_LEGACY)
-		rate_idx = rate_lowest_index(
-				&mvm->nvm_data->bands[info->band], sta);
-
-	/*
-	 * For non 2 GHZ band, remap mac80211 rate
-	 * indices into driver indices
-	 */
-	if (info->band != NL80211_BAND_2GHZ)
-		rate_idx += IWL_FIRST_OFDM_RATE;
-
-	/* For 2.4 GHZ band, check that there is no need to remap */
-	BUILD_BUG_ON(IWL_FIRST_CCK_RATE != 0);
+		rate_idx = iwl_mvm_mac_ctxt_get_lowest_rate(mvm,
+							    info,
+							    info->control.vif);
 
 	/* Get PLCP rate for tx_cmd->rate_n_flags */
 	rate_plcp = iwl_mvm_mac80211_idx_to_hwrate(mvm->fw, rate_idx);
@@ -606,8 +604,9 @@ static void iwl_mvm_skb_prepare_status(struct sk_buff *skb,
 static int iwl_mvm_get_ctrl_vif_queue(struct iwl_mvm *mvm,
 				      struct iwl_mvm_vif_link_info *link,
 				      struct ieee80211_tx_info *info,
-				      struct ieee80211_hdr *hdr)
+				      struct sk_buff *skb)
 {
+	struct ieee80211_hdr *hdr = (void *)skb->data;
 	__le16 fc = hdr->frame_control;
 
 	switch (info->control.vif->type) {
@@ -624,7 +623,7 @@ static int iwl_mvm_get_ctrl_vif_queue(struct iwl_mvm *mvm,
 		 * reason 7 ("Class 3 frame received from nonassociated STA").
 		 */
 		if (ieee80211_is_mgmt(fc) &&
-		    (!ieee80211_is_bufferable_mmpdu(fc) ||
+		    (!ieee80211_is_bufferable_mmpdu(skb) ||
 		     ieee80211_is_deauth(fc) || ieee80211_is_disassoc(fc)))
 			return link->mgmt_queue;
 
@@ -757,7 +756,7 @@ int iwl_mvm_tx_skb_non_sta(struct iwl_mvm *mvm, struct sk_buff *skb)
 				sta_id = link->mcast_sta.sta_id;
 
 			queue = iwl_mvm_get_ctrl_vif_queue(mvm, link, &info,
-							   hdr);
+							   skb);
 		} else if (info.control.vif->type == NL80211_IFTYPE_MONITOR) {
 			queue = mvm->snif_queue;
 			sta_id = mvm->snif_sta.sta_id;
@@ -1256,8 +1255,7 @@ int iwl_mvm_tx_skb_sta(struct iwl_mvm *mvm, struct sk_buff *skb,
 	if (ret)
 		return ret;
 
-	if (WARN_ON(skb_queue_empty(&mpdus_skbs)))
-		return ret;
+	WARN_ON(skb_queue_empty(&mpdus_skbs));
 
 	while (!skb_queue_empty(&mpdus_skbs)) {
 		skb = __skb_dequeue(&mpdus_skbs);
