@@ -91,7 +91,6 @@ int io_shutdown_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 		return -EINVAL;
 
 	shutdown->how = READ_ONCE(sqe->len);
-	req->flags |= REQ_F_FORCE_ASYNC;
 	return 0;
 }
 
@@ -101,7 +100,8 @@ int io_shutdown(struct io_kiocb *req, unsigned int issue_flags)
 	struct socket *sock;
 	int ret;
 
-	WARN_ON_ONCE(issue_flags & IO_URING_F_NONBLOCK);
+	if (issue_flags & IO_URING_F_NONBLOCK)
+		return -EAGAIN;
 
 	sock = sock_from_file(req->file);
 	if (unlikely(!sock))
@@ -184,8 +184,8 @@ static int io_setup_async_msg(struct io_kiocb *req,
 		async_msg->msg.msg_name = &async_msg->addr;
 	/* if were using fast_iov, set it to the new one */
 	if (iter_is_iovec(&kmsg->msg.msg_iter) && !kmsg->free_iov) {
-		size_t fast_idx = kmsg->msg.msg_iter.iov - kmsg->fast_iov;
-		async_msg->msg.msg_iter.iov = &async_msg->fast_iov[fast_idx];
+		size_t fast_idx = iter_iov(&kmsg->msg.msg_iter) - kmsg->fast_iov;
+		async_msg->msg.msg_iter.__iov = &async_msg->fast_iov[fast_idx];
 	}
 
 	return -EAGAIN;
