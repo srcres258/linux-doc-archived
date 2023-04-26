@@ -325,6 +325,9 @@ static int nbd_set_size(struct nbd_device *nbd, loff_t bytesize,
 	if (blk_validate_block_size(blksize))
 		return -EINVAL;
 
+	if (bytesize < 0)
+		return -EINVAL;
+
 	nbd->config->bytesize = bytesize;
 	nbd->config->blksize_bits = __ffs(blksize);
 
@@ -1111,6 +1114,9 @@ static int nbd_add_socket(struct nbd_device *nbd, unsigned long arg,
 	struct nbd_sock *nsock;
 	int err;
 
+	/* Arg will be cast to int, check it to avoid overflow */
+	if (arg > INT_MAX)
+		return -EINVAL;
 	sock = nbd_get_socket(nbd, arg, &err);
 	if (!sock)
 		return err;
@@ -1799,7 +1805,6 @@ static struct nbd_device *nbd_dev_add(int index, unsigned int refs)
 	 * Tell the block layer that we are not a rotational device
 	 */
 	blk_queue_flag_set(QUEUE_FLAG_NONROT, disk->queue);
-	blk_queue_flag_clear(QUEUE_FLAG_ADD_RANDOM, disk->queue);
 	disk->queue->limits.discard_granularity = 0;
 	blk_queue_max_discard_sectors(disk->queue, 0);
 	blk_queue_max_segment_size(disk->queue, UINT_MAX);
@@ -1934,11 +1939,11 @@ static int nbd_genl_connect(struct sk_buff *skb, struct genl_info *info)
 			return -EINVAL;
 		}
 	}
-	if (!info->attrs[NBD_ATTR_SOCKETS]) {
+	if (GENL_REQ_ATTR_CHECK(info, NBD_ATTR_SOCKETS)) {
 		pr_err("must specify at least one socket\n");
 		return -EINVAL;
 	}
-	if (!info->attrs[NBD_ATTR_SIZE_BYTES]) {
+	if (GENL_REQ_ATTR_CHECK(info, NBD_ATTR_SIZE_BYTES)) {
 		pr_err("must specify a size in bytes for the device\n");
 		return -EINVAL;
 	}
@@ -2123,7 +2128,7 @@ static int nbd_genl_disconnect(struct sk_buff *skb, struct genl_info *info)
 	if (!netlink_capable(skb, CAP_SYS_ADMIN))
 		return -EPERM;
 
-	if (!info->attrs[NBD_ATTR_INDEX]) {
+	if (GENL_REQ_ATTR_CHECK(info, NBD_ATTR_INDEX)) {
 		pr_err("must specify an index to disconnect\n");
 		return -EINVAL;
 	}
@@ -2161,7 +2166,7 @@ static int nbd_genl_reconfigure(struct sk_buff *skb, struct genl_info *info)
 	if (!netlink_capable(skb, CAP_SYS_ADMIN))
 		return -EPERM;
 
-	if (!info->attrs[NBD_ATTR_INDEX]) {
+	if (GENL_REQ_ATTR_CHECK(info, NBD_ATTR_INDEX)) {
 		pr_err("must specify a device to reconfigure\n");
 		return -EINVAL;
 	}
@@ -2325,6 +2330,7 @@ static struct genl_family nbd_genl_family __ro_after_init = {
 	.n_small_ops	= ARRAY_SIZE(nbd_connect_genl_ops),
 	.resv_start_op	= NBD_CMD_STATUS + 1,
 	.maxattr	= NBD_ATTR_MAX,
+	.netnsok	= 1,
 	.policy = nbd_attr_policy,
 	.mcgrps		= nbd_mcast_grps,
 	.n_mcgrps	= ARRAY_SIZE(nbd_mcast_grps),
