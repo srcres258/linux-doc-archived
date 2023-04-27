@@ -566,8 +566,9 @@ retry:
 	 * started */
 	folio = __filemap_get_folio(mapping, 0, FGP_WRITEBEGIN | FGP_NOFS,
 			mapping_gfp_mask(mapping));
-	if (!folio) {
-		ret = -ENOMEM;
+	if (IS_ERR(folio)) {
+		ret = PTR_ERR(folio);
+		folio = NULL;
 		goto out;
 	}
 
@@ -693,8 +694,8 @@ int ext4_try_to_write_inline_data(struct address_space *mapping,
 
 	folio = __filemap_get_folio(mapping, 0, FGP_WRITEBEGIN | FGP_NOFS,
 					mapping_gfp_mask(mapping));
-	if (!folio) {
-		ret = -ENOMEM;
+	if (IS_ERR(folio)) {
+		ret = PTR_ERR(folio);
 		goto out;
 	}
 
@@ -854,8 +855,8 @@ static int ext4_da_convert_inline_data_to_extent(struct address_space *mapping,
 
 	folio = __filemap_get_folio(mapping, 0, FGP_WRITEBEGIN,
 					mapping_gfp_mask(mapping));
-	if (!folio)
-		return -ENOMEM;
+	if (IS_ERR(folio))
+		return PTR_ERR(folio);
 
 	down_read(&EXT4_I(inode)->xattr_sem);
 	if (!ext4_has_inline_data(inode)) {
@@ -947,8 +948,8 @@ retry_journal:
 	 */
 	folio = __filemap_get_folio(mapping, 0, FGP_WRITEBEGIN | FGP_NOFS,
 					mapping_gfp_mask(mapping));
-	if (!folio) {
-		ret = -ENOMEM;
+	if (IS_ERR(folio)) {
+		ret = PTR_ERR(folio);
 		goto out_journal;
 	}
 
