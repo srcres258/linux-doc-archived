@@ -1761,8 +1761,6 @@ static void extent_buffer_write_end_io(struct btrfs_bio *bbio)
 		struct page *page = bvec->bv_page;
 		u32 len = bvec->bv_len;
 
-		atomic_dec(&eb->io_pages);
-
 		if (!uptodate) {
 			btrfs_page_clear_uptodate(fs_info, page, start, len);
 			btrfs_page_set_error(fs_info, page, start, len);
@@ -1785,7 +1783,6 @@ static void prepare_eb_write(struct extent_buffer *eb)
 	unsigned long end;
 
 	clear_bit(EXTENT_BUFFER_WRITE_ERR, &eb->bflags);
-	atomic_set(&eb->io_pages, num_extent_pages(eb));
 
 	/* Set btree blocks beyond nritems with 0 to avoid stale content */
 	nritems = btrfs_header_nritems(eb);
@@ -3225,8 +3222,7 @@ static void __free_extent_buffer(struct extent_buffer *eb)
 
 static int extent_buffer_under_io(const struct extent_buffer *eb)
 {
-	return (atomic_read(&eb->io_pages) ||
-		test_bit(EXTENT_BUFFER_WRITEBACK, &eb->bflags) ||
+	return (test_bit(EXTENT_BUFFER_WRITEBACK, &eb->bflags) ||
 		test_bit(EXTENT_BUFFER_DIRTY, &eb->bflags));
 }
 
@@ -3362,7 +3358,6 @@ __alloc_extent_buffer(struct btrfs_fs_info *fs_info, u64 start,
 
 	spin_lock_init(&eb->refs_lock);
 	atomic_set(&eb->refs, 1);
-	atomic_set(&eb->io_pages, 0);
 
 	ASSERT(len <= BTRFS_MAX_METADATA_BLOCKSIZE);
 
@@ -3479,9 +3474,9 @@ static void check_buffer_tree_ref(struct extent_buffer *eb)
 	 * adequately protected by the refcount, but the TREE_REF bit and
 	 * its corresponding reference are not. To protect against this
 	 * class of races, we call check_buffer_tree_ref from the codepaths
-	 * which trigger io after they set eb->io_pages. Note that once io is
-	 * initiated, TREE_REF can no longer be cleared, so that is the
-	 * moment at which any such race is best fixed.
+	 * which trigger io. Note that once io is initiated, TREE_REF can no
+	 * longer be cleared, so that is the moment at which any such race is
+	 * best fixed.
 	 */
 	refs = atomic_read(&eb->refs);
 	if (refs >= 2 && test_bit(EXTENT_BUFFER_TREE_REF, &eb->bflags))
@@ -4052,7 +4047,6 @@ static void extent_buffer_read_end_io(struct btrfs_bio *bbio)
 	struct bio_vec *bvec;
 	u32 bio_offset = 0;
 
-	atomic_inc(&eb->refs);
 	eb->read_mirror = bbio->mirror_num;
 
 	if (uptodate &&
@@ -4067,7 +4061,6 @@ static void extent_buffer_read_end_io(struct btrfs_bio *bbio)
 	}
 
 	bio_for_each_segment_all(bvec, &bbio->bio, iter_all) {
-		atomic_dec(&eb->io_pages);
 		end_page_read(bvec->bv_page, uptodate, eb->start + bio_offset,
 			      bvec->bv_len);
 		bio_offset += bvec->bv_len;
@@ -4090,8 +4083,8 @@ static void __read_extent_buffer_pages(struct extent_buffer *eb, int mirror_num,
 
 	clear_bit(EXTENT_BUFFER_READ_ERR, &eb->bflags);
 	eb->read_mirror = 0;
-	atomic_set(&eb->io_pages, num_pages);
 	check_buffer_tree_ref(eb);
+	atomic_inc(&eb->refs);
 
 	bbio = btrfs_bio_alloc(INLINE_EXTENT_BUFFER_PAGES,
 			       REQ_OP_READ | REQ_META, eb->fs_info,
