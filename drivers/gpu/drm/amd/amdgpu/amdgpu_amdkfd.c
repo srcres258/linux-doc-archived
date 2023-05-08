@@ -53,7 +53,6 @@ int amdgpu_amdkfd_init(void)
 	amdgpu_amdkfd_total_mem_size *= si.mem_unit;
 
 	ret = kgd2kfd_init();
-	amdgpu_amdkfd_gpuvm_init_mem_limits();
 	kfd_initialized = !ret;
 
 	return ret;
@@ -143,6 +142,8 @@ void amdgpu_amdkfd_device_init(struct amdgpu_device *adev)
 	int i;
 	int last_valid_bit;
 
+	amdgpu_amdkfd_gpuvm_init_mem_limits();
+
 	if (adev->kfd.dev) {
 		struct kgd2kfd_shared_resources gpu_resources = {
 			.compute_vmid_bitmap =
@@ -162,7 +163,7 @@ void amdgpu_amdkfd_device_init(struct amdgpu_device *adev)
 		 * clear
 		 */
 		bitmap_complement(gpu_resources.cp_queue_bitmap,
-				  adev->gfx.mec.queue_bitmap,
+				  adev->gfx.mec_bitmap[0].queue_bitmap,
 				  KGD_MAX_QUEUES);
 
 		/* According to linux/bitmap.h we shouldn't use bitmap_clear if
@@ -735,7 +736,7 @@ int amdgpu_amdkfd_flush_gpu_tlb_vmid(struct amdgpu_device *adev,
 		for (i = 0; i < adev->num_vmhubs; i++)
 			amdgpu_gmc_flush_gpu_tlb(adev, vmid, i, 0);
 	} else {
-		amdgpu_gmc_flush_gpu_tlb(adev, vmid, AMDGPU_GFXHUB_0, 0);
+		amdgpu_gmc_flush_gpu_tlb(adev, vmid, AMDGPU_GFXHUB(0), 0);
 	}
 
 	return 0;
