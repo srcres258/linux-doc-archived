@@ -1651,7 +1651,6 @@ ssize_t btrfs_do_write_iter(struct kiocb *iocb, struct iov_iter *from,
 	struct file *file = iocb->ki_filp;
 	struct btrfs_inode *inode = BTRFS_I(file_inode(file));
 	ssize_t num_written, num_sync;
-	const bool sync = iocb_is_dsync(iocb);
 
 	/*
 	 * If the fs flips readonly due to some impossible error, although we
@@ -1663,9 +1662,6 @@ ssize_t btrfs_do_write_iter(struct kiocb *iocb, struct iov_iter *from,
 
 	if (encoded && (iocb->ki_flags & IOCB_NOWAIT))
 		return -EOPNOTSUPP;
-
-	if (sync)
-		atomic_inc(&inode->sync_writers);
 
 	if (encoded) {
 		num_written = btrfs_encoded_write(iocb, from, encoded);
@@ -1685,9 +1681,6 @@ ssize_t btrfs_do_write_iter(struct kiocb *iocb, struct iov_iter *from,
 		if (num_sync < 0)
 			num_written = num_sync;
 	}
-
-	if (sync)
-		atomic_dec(&inode->sync_writers);
 
 	current->backing_dev_info = NULL;
 	return num_written;
@@ -1733,9 +1726,7 @@ static int start_ordered_ops(struct inode *inode, loff_t start, loff_t end)
 	 * several segments of stripe length (currently 64K).
 	 */
 	blk_start_plug(&plug);
-	atomic_inc(&BTRFS_I(inode)->sync_writers);
 	ret = btrfs_fdatawrite_range(inode, start, end);
-	atomic_dec(&BTRFS_I(inode)->sync_writers);
 	blk_finish_plug(&plug);
 
 	return ret;
@@ -3730,10 +3721,15 @@ static int check_direct_read(struct btrfs_fs_info *fs_info,
 	if (!iter_is_iovec(iter))
 		return 0;
 
-	for (seg = 0; seg < iter->nr_segs; seg++)
-		for (i = seg + 1; i < iter->nr_segs; i++)
-			if (iter->iov[seg].iov_base == iter->iov[i].iov_base)
+	for (seg = 0; seg < iter->nr_segs; seg++) {
+		for (i = seg + 1; i < iter->nr_segs; i++) {
+			const struct iovec *iov1 = iter_iov(iter) + seg;
+			const struct iovec *iov2 = iter_iov(iter) + i;
+
+			if (iov1->iov_base == iov2->iov_base)
 				return -EINVAL;
+		}
+	}
 	return 0;
 }
 
