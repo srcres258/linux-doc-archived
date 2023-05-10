@@ -2379,6 +2379,87 @@ done:
 }
 
 /*
+ * Search the tree again to find a leaf with smaller keys.
+ * Returns 0 if it found something.
+ * Returns 1 if there are no smaller keys.
+ * Returns < 0 on error.
+ *
+ * This may release the path, and so you may lose any locks held at the
+ * time you call it.
+ */
+static int btrfs_prev_leaf(struct btrfs_root *root, struct btrfs_path *path)
+{
+	struct btrfs_key key;
+	struct btrfs_key orig_key;
+	struct btrfs_disk_key found_key;
+	int ret;
+
+	btrfs_item_key_to_cpu(path->nodes[0], &key, 0);
+	orig_key = key;
+
+	if (key.offset > 0) {
+		key.offset--;
+	} else if (key.type > 0) {
+		key.type--;
+		key.offset = (u64)-1;
+	} else if (key.objectid > 0) {
+		key.objectid--;
+		key.type = (u8)-1;
+		key.offset = (u64)-1;
+	} else {
+		return 1;
+	}
+
+	btrfs_release_path(path);
+	ret = btrfs_search_slot(NULL, root, &key, path, 0, 0);
+	if (ret <= 0)
+		return ret;
+
+	/*
+	 * Previous key not found. Even if we were at slot 0 of the leaf we had
+	 * before releasing the path and calling btrfs_search_slot(), we now may
+	 * be in a slot pointing to the same original key - this can happen if
+	 * after we released the path, one of more items were moved from a
+	 * sibling leaf into the front of the leaf we had due to an insertion
+	 * (see push_leaf_right()).
+	 * If we hit this case and our slot is > 0 and just decrement the slot
+	 * so that the caller does not process the same key again, which may or
+	 * may not break the caller, depending on its logic.
+	 */
+	if (path->slots[0] < btrfs_header_nritems(path->nodes[0])) {
+		btrfs_item_key(path->nodes[0], &found_key, path->slots[0]);
+		ret = comp_keys(&found_key, &orig_key);
+		if (ret == 0) {
+			if (path->slots[0] > 0) {
+				path->slots[0]--;
+				return 0;
+			}
+			/*
+			 * At slot 0, same key as before, it means orig_key is
+			 * the lowest, leftmost, key in the tree. We're done.
+			 */
+			return 1;
+		}
+	}
+
+	btrfs_item_key(path->nodes[0], &found_key, 0);
+	ret = comp_keys(&found_key, &key);
+	/*
+	 * We might have had an item with the previous key in the tree right
+	 * before we released our path. And after we released our path, that
+	 * item might have been pushed to the first slot (0) of the leaf we
+	 * were holding due to a tree balance. Alternatively, an item with the
+	 * previous key can exist as the only element of a leaf (big fat item).
+	 * Therefore account for these 2 cases, so that our callers (like
+	 * btrfs_previous_item) don't miss an existing item with a key matching
+	 * the previous key we computed above.
+	 */
+	if (ret <= 0)
+		return 0;
+	return 1;
+}
+
+/*
  * helper to use instead of search slot if no exact match is needed but
  * instead the next or previous item should be returned.
  * When find_higher is true, the next higher item is returned, the next lower
@@ -2552,6 +2633,7 @@ void btrfs_set_item_key_safe(struct btrfs_fs_info *fs_info,
 	if (slot > 0) {
 		btrfs_item_key(eb, &disk_key, slot - 1);
 		if (unlikely(comp_keys(&disk_key, new_key) >= 0)) {
+			btrfs_print_leaf(eb);
 			btrfs_crit(fs_info,
 		"slot %u key (%llu %u %llu) new key (%llu %u %llu)",
 				   slot, btrfs_disk_key_objectid(&disk_key),
@@ -2559,13 +2641,13 @@ void btrfs_set_item_key_safe(struct btrfs_fs_info *fs_info,
 				   btrfs_disk_key_offset(&disk_key),
 				   new_key->objectid, new_key->type,
 				   new_key->offset);
-			btrfs_print_leaf(eb);
 			BUG();
 		}
 	}
 	if (slot < btrfs_header_nritems(eb) - 1) {
 		btrfs_item_key(eb, &disk_key, slot + 1);
 		if (unlikely(comp_keys(&disk_key, new_key) <= 0)) {
+			btrfs_print_leaf(eb);
 			btrfs_crit(fs_info,
 		"slot %u key (%llu %u %llu) new key (%llu %u %llu)",
 				   slot, btrfs_disk_key_objectid(&disk_key),
@@ -2573,7 +2655,6 @@ void btrfs_set_item_key_safe(struct btrfs_fs_info *fs_info,
 				   btrfs_disk_key_offset(&disk_key),
 				   new_key->objectid, new_key->type,
 				   new_key->offset);
-			btrfs_print_leaf(eb);
 			BUG();
 		}
 	}
@@ -2626,7 +2707,7 @@ static bool check_sibling_keys(struct extent_buffer *left,
 		btrfs_item_key_to_cpu(right, &right_first, 0);
 	}
 
-	if (btrfs_comp_cpu_keys(&left_last, &right_first) >= 0) {
+	if (unlikely(btrfs_comp_cpu_keys(&left_last, &right_first) >= 0)) {
 		btrfs_crit(left->fs_info, "left extent buffer:");
 		btrfs_print_tree(left, false);
 		btrfs_crit(left->fs_info, "right extent buffer:");
@@ -2996,7 +3077,7 @@ static noinline int split_node(struct btrfs_trans_handle *trans,
  * and nr indicate which items in the leaf to check.  This totals up the
  * space used both by the item structs and the item data
  */
-static int leaf_space_used(struct extent_buffer *l, int start, int nr)
+static int leaf_space_used(const struct extent_buffer *l, int start, int nr)
 {
 	int data_len;
 	int nritems = btrfs_header_nritems(l);
@@ -3016,7 +3097,7 @@ static int leaf_space_used(struct extent_buffer *l, int start, int nr)
  * the start of the leaf data.  IOW, how much room
  * the leaf has left for both items and data
  */
-noinline int btrfs_leaf_free_space(struct extent_buffer *leaf)
+int btrfs_leaf_free_space(const struct extent_buffer *leaf)
 {
 	struct btrfs_fs_info *fs_info = leaf->fs_info;
 	int nritems = btrfs_header_nritems(leaf);
@@ -4471,86 +4552,6 @@ int btrfs_del_items(struct btrfs_trans_handle *trans, struct btrfs_root *root,
 		}
 	}
 	return ret;
-}
-
-/*
- * search the tree again to find a leaf with lesser keys
- * returns 0 if it found something or 1 if there are no lesser leaves.
- * returns < 0 on io errors.
- *
- * This may release the path, and so you may lose any locks held at the
- * time you call it.
- */
-int btrfs_prev_leaf(struct btrfs_root *root, struct btrfs_path *path)
-{
-	struct btrfs_key key;
-	struct btrfs_key orig_key;
-	struct btrfs_disk_key found_key;
-	int ret;
-
-	btrfs_item_key_to_cpu(path->nodes[0], &key, 0);
-	orig_key = key;
-
-	if (key.offset > 0) {
-		key.offset--;
-	} else if (key.type > 0) {
-		key.type--;
-		key.offset = (u64)-1;
-	} else if (key.objectid > 0) {
-		key.objectid--;
-		key.type = (u8)-1;
-		key.offset = (u64)-1;
-	} else {
-		return 1;
-	}
-
-	btrfs_release_path(path);
-	ret = btrfs_search_slot(NULL, root, &key, path, 0, 0);
-	if (ret <= 0)
-		return ret;
-
-	/*
-	 * Previous key not found. Even if we were at slot 0 of the leaf we had
-	 * before releasing the path and calling btrfs_search_slot(), we now may
-	 * be in a slot pointing to the same original key - this can happen if
-	 * after we released the path, one of more items were moved from a
-	 * sibling leaf into the front of the leaf we had due to an insertion
-	 * (see push_leaf_right()).
-	 * If we hit this case and our slot is > 0 and just decrement the slot
-	 * so that the caller does not process the same key again, which may or
-	 * may not break the caller, depending on its logic.
-	 */
-	if (path->slots[0] < btrfs_header_nritems(path->nodes[0])) {
-		btrfs_item_key(path->nodes[0], &found_key, path->slots[0]);
-		ret = comp_keys(&found_key, &orig_key);
-		if (ret == 0) {
-			if (path->slots[0] > 0) {
-				path->slots[0]--;
-				return 0;
-			}
-			/*
-			 * At slot 0, same key as before, it means orig_key is
-			 * the lowest, leftmost, key in the tree. We're done.
-			 */
-			return 1;
-		}
-	}
-
-	btrfs_item_key(path->nodes[0], &found_key, 0);
-	ret = comp_keys(&found_key, &key);
-	/*
-	 * We might have had an item with the previous key in the tree right
-	 * before we released our path. And after we released our path, that
-	 * item might have been pushed to the first slot (0) of the leaf we
-	 * were holding due to a tree balance. Alternatively, an item with the
-	 * previous key can exist as the only element of a leaf (big fat item).
-	 * Therefore account for these 2 cases, so that our callers (like
-	 * btrfs_previous_item) don't miss an existing item with a key matching
-	 * the previous key we computed above.
-	 */
-	if (ret <= 0)
-		return 0;
-	return 1;
 }
 
 /*
