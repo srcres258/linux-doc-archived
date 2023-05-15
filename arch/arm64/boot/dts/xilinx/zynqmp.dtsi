@@ -400,7 +400,6 @@
 
 		gic: interrupt-controller@f9010000 {
 			compatible = "arm,gic-400";
-			#address-cells = <0>;
 			#interrupt-cells = <3>;
 			reg = <0x0 0xf9010000 0x0 0x10000>,
 			      <0x0 0xf9020000 0x0 0x20000>,
@@ -409,6 +408,18 @@
 			interrupt-controller;
 			interrupt-parent = <&gic>;
 			interrupts = <1 9 0xf04>;
+		};
+
+		gpu: gpu@fd4b0000 {
+			status = "disabled";
+			compatible = "xlnx,zynqmp-mali", "arm,mali-400";
+			reg = <0x0 0xfd4b0000 0x0 0x10000>;
+			interrupt-parent = <&gic>;
+			interrupts = <0 132 4>, <0 132 4>, <0 132 4>,
+				     <0 132 4>, <0 132 4>, <0 132 4>;
+			interrupt-names = "gp", "gpmmu", "pp0", "ppmmu0", "pp1", "ppmmu1";
+			clock-names = "bus", "core";
+			power-domains = <&zynqmp_firmware PD_GPU>;
 		};
 
 		/* LPDDMA default allows only secured access. inorder to enable
@@ -602,7 +613,6 @@
 		gpio: gpio@ff0a0000 {
 			compatible = "xlnx,zynqmp-gpio-1.0";
 			status = "disabled";
-			#address-cells = <0>;
 			#gpio-cells = <0x2>;
 			gpio-controller;
 			interrupt-parent = <&gic>;
