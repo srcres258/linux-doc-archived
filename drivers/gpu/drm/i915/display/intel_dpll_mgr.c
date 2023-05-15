@@ -169,8 +169,8 @@ void assert_shared_dpll(struct drm_i915_private *dev_priv,
 		return;
 
 	cur_state = intel_dpll_get_hw_state(dev_priv, pll, &hw_state);
-	I915_STATE_WARN(cur_state != state,
-	     "%s assertion failure (expected %s, current %s)\n",
+	I915_STATE_WARN(dev_priv, cur_state != state,
+			"%s assertion failure (expected %s, current %s)\n",
 			pll->info->name, str_on_off(state),
 			str_on_off(cur_state));
 }
@@ -464,12 +464,11 @@ static void ibx_assert_pch_refclk_enabled(struct drm_i915_private *dev_priv)
 	u32 val;
 	bool enabled;
 
-	I915_STATE_WARN_ON(!(HAS_PCH_IBX(dev_priv) || HAS_PCH_CPT(dev_priv)));
-
 	val = intel_de_read(dev_priv, PCH_DREF_CONTROL);
 	enabled = !!(val & (DREF_SSC_SOURCE_MASK | DREF_NONSPREAD_SOURCE_MASK |
 			    DREF_SUPERSPREAD_SOURCE_MASK));
-	I915_STATE_WARN(!enabled, "PCH refclk assertion failure, should be active but is disabled\n");
+	I915_STATE_WARN(dev_priv, !enabled,
+			"PCH refclk assertion failure, should be active but is disabled\n");
 }
 
 static void ibx_pch_dpll_enable(struct drm_i915_private *dev_priv,
@@ -4104,7 +4103,7 @@ void intel_shared_dpll_init(struct drm_i915_private *dev_priv)
 
 	mutex_init(&dev_priv->display.dpll.lock);
 
-	if (IS_DG2(dev_priv))
+	if (DISPLAY_VER(dev_priv) >= 14 || IS_DG2(dev_priv))
 		/* No shared DPLLs on DG2; port PLLs are part of the PHY */
 		dpll_mgr = NULL;
 	else if (IS_ALDERLAKE_P(dev_priv))
@@ -4407,17 +4406,18 @@ verify_single_dpll_state(struct drm_i915_private *dev_priv,
 	active = intel_dpll_get_hw_state(dev_priv, pll, &dpll_hw_state);
 
 	if (!(pll->info->flags & INTEL_DPLL_ALWAYS_ON)) {
-		I915_STATE_WARN(!pll->on && pll->active_mask,
+		I915_STATE_WARN(dev_priv, !pll->on && pll->active_mask,
 				"pll in active use but not on in sw tracking\n");
-		I915_STATE_WARN(pll->on && !pll->active_mask,
+		I915_STATE_WARN(dev_priv, pll->on && !pll->active_mask,
 				"pll is on but not used by any active pipe\n");
-		I915_STATE_WARN(pll->on != active,
+		I915_STATE_WARN(dev_priv, pll->on != active,
 				"pll on state mismatch (expected %i, found %i)\n",
 				pll->on, active);
 	}
 
 	if (!crtc) {
-		I915_STATE_WARN(pll->active_mask & ~pll->state.pipe_mask,
+		I915_STATE_WARN(dev_priv,
+				pll->active_mask & ~pll->state.pipe_mask,
 				"more active pll users than references: 0x%x vs 0x%x\n",
 				pll->active_mask, pll->state.pipe_mask);
 
@@ -4427,20 +4427,20 @@ verify_single_dpll_state(struct drm_i915_private *dev_priv,
 	pipe_mask = BIT(crtc->pipe);
 
 	if (new_crtc_state->hw.active)
-		I915_STATE_WARN(!(pll->active_mask & pipe_mask),
+		I915_STATE_WARN(dev_priv, !(pll->active_mask & pipe_mask),
 				"pll active mismatch (expected pipe %c in active mask 0x%x)\n",
 				pipe_name(crtc->pipe), pll->active_mask);
 	else
-		I915_STATE_WARN(pll->active_mask & pipe_mask,
+		I915_STATE_WARN(dev_priv, pll->active_mask & pipe_mask,
 				"pll active mismatch (didn't expect pipe %c in active mask 0x%x)\n",
 				pipe_name(crtc->pipe), pll->active_mask);
 
-	I915_STATE_WARN(!(pll->state.pipe_mask & pipe_mask),
+	I915_STATE_WARN(dev_priv, !(pll->state.pipe_mask & pipe_mask),
 			"pll enabled crtcs mismatch (expected 0x%x in 0x%x)\n",
 			pipe_mask, pll->state.pipe_mask);
 
-	I915_STATE_WARN(pll->on && memcmp(&pll->state.hw_state,
-					  &dpll_hw_state,
+	I915_STATE_WARN(dev_priv,
+			pll->on && memcmp(&pll->state.hw_state, &dpll_hw_state,
 					  sizeof(dpll_hw_state)),
 			"pll hw state mismatch\n");
 }
@@ -4460,10 +4460,10 @@ void intel_shared_dpll_state_verify(struct intel_crtc *crtc,
 		u8 pipe_mask = BIT(crtc->pipe);
 		struct intel_shared_dpll *pll = old_crtc_state->shared_dpll;
 
-		I915_STATE_WARN(pll->active_mask & pipe_mask,
+		I915_STATE_WARN(dev_priv, pll->active_mask & pipe_mask,
 				"pll active mismatch (didn't expect pipe %c in active mask (0x%x))\n",
 				pipe_name(crtc->pipe), pll->active_mask);
-		I915_STATE_WARN(pll->state.pipe_mask & pipe_mask,
+		I915_STATE_WARN(dev_priv, pll->state.pipe_mask & pipe_mask,
 				"pll enabled crtcs mismatch (found %x in enabled mask (0x%x))\n",
 				pipe_name(crtc->pipe), pll->state.pipe_mask);
 	}
