@@ -18,33 +18,42 @@
 #include <linux/export.h>
 #include "p17v.h"
 
+static inline bool check_ptr_reg(struct snd_emu10k1 *emu, unsigned int reg)
+{
+	if (snd_BUG_ON(!emu))
+		return false;
+	if (snd_BUG_ON(reg & (emu->audigy ? (0xffff0000 & ~A_PTR_ADDRESS_MASK)
+					  : (0xffff0000 & ~PTR_ADDRESS_MASK))))
+		return false;
+	if (snd_BUG_ON(reg & 0x0000ffff & ~PTR_CHANNELNUM_MASK))
+		return false;
+	return true;
+}
+
 unsigned int snd_emu10k1_ptr_read(struct snd_emu10k1 * emu, unsigned int reg, unsigned int chn)
 {
 	unsigned long flags;
 	unsigned int regptr, val;
 	unsigned int mask;
 
-	mask = emu->audigy ? A_PTR_ADDRESS_MASK : PTR_ADDRESS_MASK;
-	regptr = ((reg << 16) & mask) | (chn & PTR_CHANNELNUM_MASK);
+	regptr = (reg << 16) | chn;
+	if (!check_ptr_reg(emu, regptr))
+		return 0;
+
+	spin_lock_irqsave(&emu->emu_lock, flags);
+	outl(regptr, emu->port + PTR);
+	val = inl(emu->port + DATA);
+	spin_unlock_irqrestore(&emu->emu_lock, flags);
 
 	if (reg & 0xff000000) {
 		unsigned char size, offset;
 		
 		size = (reg >> 24) & 0x3f;
 		offset = (reg >> 16) & 0x1f;
-		mask = ((1 << size) - 1) << offset;
+		mask = (1 << size) - 1;
 		
-		spin_lock_irqsave(&emu->emu_lock, flags);
-		outl(regptr, emu->port + PTR);
-		val = inl(emu->port + DATA);
-		spin_unlock_irqrestore(&emu->emu_lock, flags);
-		
-		return (val & mask) >> offset;
+		return (val >> offset) & mask;
 	} else {
-		spin_lock_irqsave(&emu->emu_lock, flags);
-		outl(regptr, emu->port + PTR);
-		val = inl(emu->port + DATA);
-		spin_unlock_irqrestore(&emu->emu_lock, flags);
 		return val;
 	}
 }
@@ -57,30 +66,30 @@ void snd_emu10k1_ptr_write(struct snd_emu10k1 *emu, unsigned int reg, unsigned i
 	unsigned long flags;
 	unsigned int mask;
 
-	if (snd_BUG_ON(!emu))
+	regptr = (reg << 16) | chn;
+	if (!check_ptr_reg(emu, regptr))
 		return;
-	mask = emu->audigy ? A_PTR_ADDRESS_MASK : PTR_ADDRESS_MASK;
-	regptr = ((reg << 16) & mask) | (chn & PTR_CHANNELNUM_MASK);
 
 	if (reg & 0xff000000) {
 		unsigned char size, offset;
 
 		size = (reg >> 24) & 0x3f;
 		offset = (reg >> 16) & 0x1f;
-		mask = ((1 << size) - 1) << offset;
-		data = (data << offset) & mask;
+		mask = (1 << size) - 1;
+		if (snd_BUG_ON(data & ~mask))
+			return;
+		mask <<= offset;
+		data <<= offset;
 
 		spin_lock_irqsave(&emu->emu_lock, flags);
 		outl(regptr, emu->port + PTR);
 		data |= inl(emu->port + DATA) & ~mask;
-		outl(data, emu->port + DATA);
-		spin_unlock_irqrestore(&emu->emu_lock, flags);		
 	} else {
 		spin_lock_irqsave(&emu->emu_lock, flags);
 		outl(regptr, emu->port + PTR);
-		outl(data, emu->port + DATA);
-		spin_unlock_irqrestore(&emu->emu_lock, flags);
 	}
+	outl(data, emu->port + DATA);
+	spin_unlock_irqrestore(&emu->emu_lock, flags);
 }
 
 EXPORT_SYMBOL(snd_emu10k1_ptr_write);
@@ -233,16 +242,13 @@ int snd_emu10k1_i2c_write(struct snd_emu10k1 *emu,
 	return err;
 }
 
-void snd_emu1010_fpga_write(struct snd_emu10k1 *emu, u32 reg, u32 value)
+static void snd_emu1010_fpga_write_locked(struct snd_emu10k1 *emu, u32 reg, u32 value)
 {
-	unsigned long flags;
-
 	if (snd_BUG_ON(reg > 0x3f))
 		return;
 	reg += 0x40; /* 0x40 upwards are registers. */
 	if (snd_BUG_ON(value > 0x3f)) /* 0 to 0x3f are values */
 		return;
-	spin_lock_irqsave(&emu->emu_lock, flags);
 	outw(reg, emu->port + A_GPIO);
 	udelay(10);
 	outw(reg | 0x80, emu->port + A_GPIO);  /* High bit clocks the value into the fpga. */
@@ -250,6 +256,14 @@ void snd_emu1010_fpga_write(struct snd_emu10k1 *emu, u32 reg, u32 value)
 	outw(value, emu->port + A_GPIO);
 	udelay(10);
 	outw(value | 0x80 , emu->port + A_GPIO);  /* High bit clocks the value into the fpga. */
+}
+
+void snd_emu1010_fpga_write(struct snd_emu10k1 *emu, u32 reg, u32 value)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&emu->emu_lock, flags);
+	snd_emu1010_fpga_write_locked(emu, reg, value);
 	spin_unlock_irqrestore(&emu->emu_lock, flags);
 }
 
@@ -276,14 +290,18 @@ void snd_emu1010_fpga_read(struct snd_emu10k1 *emu, u32 reg, u32 *value)
  */
 void snd_emu1010_fpga_link_dst_src_write(struct snd_emu10k1 *emu, u32 dst, u32 src)
 {
+	unsigned long flags;
+
 	if (snd_BUG_ON(dst & ~0x71f))
 		return;
 	if (snd_BUG_ON(src & ~0x71f))
 		return;
-	snd_emu1010_fpga_write(emu, EMU_HANA_DESTHI, dst >> 8);
-	snd_emu1010_fpga_write(emu, EMU_HANA_DESTLO, dst & 0x1f);
-	snd_emu1010_fpga_write(emu, EMU_HANA_SRCHI, src >> 8);
-	snd_emu1010_fpga_write(emu, EMU_HANA_SRCLO, src & 0x1f);
+	spin_lock_irqsave(&emu->emu_lock, flags);
+	snd_emu1010_fpga_write_locked(emu, EMU_HANA_DESTHI, dst >> 8);
+	snd_emu1010_fpga_write_locked(emu, EMU_HANA_DESTLO, dst & 0x1f);
+	snd_emu1010_fpga_write_locked(emu, EMU_HANA_SRCHI, src >> 8);
+	snd_emu1010_fpga_write_locked(emu, EMU_HANA_SRCLO, src & 0x1f);
+	spin_unlock_irqrestore(&emu->emu_lock, flags);
 }
 
 void snd_emu10k1_intr_enable(struct snd_emu10k1 *emu, unsigned int intrenb)
