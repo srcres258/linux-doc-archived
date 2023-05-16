@@ -36,6 +36,8 @@
 struct hl_device;
 struct hl_fpriv;
 
+#define PCI_VENDOR_ID_HABANALABS	0x1da3
+
 /* Use upper bits of mmap offset to store habana driver specific information.
  * bits[63:59] - Encode mmap type
  * bits[45:0]  - mmap offset value
@@ -3225,8 +3227,11 @@ struct hl_reset_info {
  * @captured_err_info: holds information about errors.
  * @reset_info: holds current device reset information.
  * @stream_master_qid_arr: pointer to array with QIDs of master streams.
- * @fw_major_version: major version of current loaded preboot.
- * @fw_minor_version: minor version of current loaded preboot.
+ * @fw_inner_major_ver: the major of current loaded preboot inner version.
+ * @fw_inner_minor_ver: the minor of current loaded preboot inner version.
+ * @fw_sw_major_ver: the major of current loaded preboot SW version.
+ * @fw_sw_minor_ver: the minor of current loaded preboot SW version.
+ * @fw_sw_sub_minor_ver: the sub-minor of current loaded preboot SW version.
  * @dram_used_mem: current DRAM memory consumption.
  * @memory_scrub_val: the value to which the dram will be scrubbed to using cb scrub_device_dram
  * @timeout_jiffies: device CS timeout value.
@@ -3287,7 +3292,7 @@ struct hl_reset_info {
  * @in_debug: whether the device is in a state where the profiling/tracing infrastructure
  *            can be used. This indication is needed because in some ASICs we need to do
  *            specific operations to enable that infrastructure.
- * @cdev_sysfs_created: were char devices and sysfs nodes created.
+ * @cdev_sysfs_debugfs_created: were char devices and sysfs/debugfs files created.
  * @stop_on_err: true if engines should stop on error.
  * @supports_sync_stream: is sync stream supported.
  * @sync_stream_queue_idx: helper index for sync stream queues initialization.
@@ -3412,8 +3417,11 @@ struct hl_device {
 	struct hl_reset_info		reset_info;
 
 	u32				*stream_master_qid_arr;
-	u32				fw_major_version;
-	u32				fw_minor_version;
+	u32				fw_inner_major_ver;
+	u32				fw_inner_minor_ver;
+	u32				fw_sw_major_ver;
+	u32				fw_sw_minor_ver;
+	u32				fw_sw_sub_minor_ver;
 	atomic64_t			dram_used_mem;
 	u64				memory_scrub_val;
 	u64				timeout_jiffies;
@@ -3451,7 +3459,7 @@ struct hl_device {
 	u8				init_done;
 	u8				device_cpu_disabled;
 	u8				in_debug;
-	u8				cdev_sysfs_created;
+	u8				cdev_sysfs_debugfs_created;
 	u8				stop_on_err;
 	u8				supports_sync_stream;
 	u8				sync_stream_queue_idx;
@@ -3547,9 +3555,15 @@ struct hl_ioctl_desc {
 	hl_ioctl_t *func;
 };
 
-static inline bool hl_is_fw_ver_below_1_9(struct hl_device *hdev)
+static inline bool hl_is_fw_sw_ver_below(struct hl_device *hdev, u32 fw_sw_major, u32 fw_sw_minor)
 {
-	return (hdev->fw_major_version < 42);
+	if (hdev->fw_sw_major_ver < fw_sw_major)
+		return true;
+	if (hdev->fw_sw_major_ver > fw_sw_major)
+		return false;
+	if (hdev->fw_sw_minor_ver < fw_sw_minor)
+		return true;
+	return false;
 }
 
 /*
@@ -3872,6 +3886,7 @@ int hl_fw_dram_replaced_row_get(struct hl_device *hdev,
 int hl_fw_dram_pending_row_get(struct hl_device *hdev, u32 *pend_rows_num);
 int hl_fw_cpucp_engine_core_asid_set(struct hl_device *hdev, u32 asid);
 int hl_fw_send_device_activity(struct hl_device *hdev, bool open);
+int hl_fw_send_soft_reset(struct hl_device *hdev);
 int hl_pci_bars_map(struct hl_device *hdev, const char * const name[3],
 			bool is_wc[3]);
 int hl_pci_elbi_read(struct hl_device *hdev, u64 addr, u32 *data);
@@ -3921,7 +3936,7 @@ void hl_dec_fini(struct hl_device *hdev);
 void hl_dec_ctx_fini(struct hl_ctx *ctx);
 
 void hl_release_pending_user_interrupts(struct hl_device *hdev);
-void hl_abort_waitings_for_completion(struct hl_device *hdev);
+void hl_abort_waiting_for_cs_completions(struct hl_device *hdev);
 int hl_cs_signal_sob_wraparound_handler(struct hl_device *hdev, u32 q_idx,
 			struct hl_hw_sob **hw_sob, u32 count, bool encaps_sig);
 
@@ -3963,6 +3978,8 @@ void hl_handle_fw_err(struct hl_device *hdev, struct hl_info_fw_err_info *info);
 
 void hl_debugfs_init(void);
 void hl_debugfs_fini(void);
+int hl_debugfs_device_init(struct hl_device *hdev);
+void hl_debugfs_device_fini(struct hl_device *hdev);
 void hl_debugfs_add_device(struct hl_device *hdev);
 void hl_debugfs_remove_device(struct hl_device *hdev);
 void hl_debugfs_add_file(struct hl_fpriv *hpriv);
