@@ -354,12 +354,12 @@ static struct request *blk_mq_rq_ctx_init(struct blk_mq_alloc_data *data,
 		data->rq_flags |= RQF_IO_STAT;
 	rq->rq_flags = data->rq_flags;
 
-	if (!(data->rq_flags & RQF_ELV)) {
-		rq->tag = tag;
-		rq->internal_tag = BLK_MQ_NO_TAG;
-	} else {
+	if (data->rq_flags & RQF_SCHED_TAGS) {
 		rq->tag = BLK_MQ_NO_TAG;
 		rq->internal_tag = tag;
+	} else {
+		rq->tag = tag;
+		rq->internal_tag = BLK_MQ_NO_TAG;
 	}
 	rq->timeout = 0;
 
@@ -386,17 +386,14 @@ static struct request *blk_mq_rq_ctx_init(struct blk_mq_alloc_data *data,
 	WRITE_ONCE(rq->deadline, 0);
 	req_ref_set(rq, 1);
 
-	if (rq->rq_flags & RQF_ELV) {
+	if (rq->rq_flags & RQF_USE_SCHED) {
 		struct elevator_queue *e = data->q->elevator;
 
 		INIT_HLIST_NODE(&rq->hash);
 		RB_CLEAR_NODE(&rq->rb_node);
 
-		if (!op_is_flush(data->cmd_flags) &&
-		    e->type->ops.prepare_request) {
+		if (e->type->ops.prepare_request)
 			e->type->ops.prepare_request(rq);
-			rq->rq_flags |= RQF_ELVPRIV;
-		}
 	}
 
 	return rq;
@@ -449,26 +446,32 @@ static struct request *__blk_mq_alloc_requests(struct blk_mq_alloc_data *data)
 		data->flags |= BLK_MQ_REQ_NOWAIT;
 
 	if (q->elevator) {
-		struct elevator_queue *e = q->elevator;
-
-		data->rq_flags |= RQF_ELV;
+		/*
+		 * All requests use scheduler tags when an I/O scheduler is
+		 * enabled for the queue.
+		 */
+		data->rq_flags |= RQF_SCHED_TAGS;
 
 		/*
 		 * Flush/passthrough requests are special and go directly to the
-		 * dispatch list. Don't include reserved tags in the
-		 * limiting, as it isn't useful.
+		 * dispatch list.
 		 */
 		if (!op_is_flush(data->cmd_flags) &&
-		    !blk_op_is_passthrough(data->cmd_flags) &&
-		    e->type->ops.limit_depth &&
-		    !(data->flags & BLK_MQ_REQ_RESERVED))
-			e->type->ops.limit_depth(data->cmd_flags, data);
+		    !blk_op_is_passthrough(data->cmd_flags)) {
+			struct elevator_mq_ops *ops = &q->elevator->type->ops;
+
+			WARN_ON_ONCE(data->flags & BLK_MQ_REQ_RESERVED);
+
+			data->rq_flags |= RQF_USE_SCHED;
+			if (ops->limit_depth)
+				ops->limit_depth(data->cmd_flags, data);
+		}
 	}
 
 retry:
 	data->ctx = blk_mq_get_ctx(q);
 	data->hctx = blk_mq_map_queue(q, data->cmd_flags, data->ctx);
-	if (!(data->rq_flags & RQF_ELV))
+	if (!(data->rq_flags & RQF_SCHED_TAGS))
 		blk_mq_tag_busy(data->hctx);
 
 	if (data->flags & BLK_MQ_REQ_RESERVED)
@@ -648,10 +651,10 @@ struct request *blk_mq_alloc_request_hctx(struct request_queue *q,
 		goto out_queue_exit;
 	data.ctx = __blk_mq_get_ctx(q, cpu);
 
-	if (!q->elevator)
-		blk_mq_tag_busy(data.hctx);
+	if (q->elevator)
+		data.rq_flags |= RQF_SCHED_TAGS;
 	else
-		data.rq_flags |= RQF_ELV;
+		blk_mq_tag_busy(data.hctx);
 
 	if (flags & BLK_MQ_REQ_RESERVED)
 		data.rq_flags |= RQF_RESV;
@@ -696,7 +699,7 @@ void blk_mq_free_request(struct request *rq)
 	struct request_queue *q = rq->q;
 	struct blk_mq_hw_ctx *hctx = rq->mq_hctx;
 
-	if ((rq->rq_flags & RQF_ELVPRIV) &&
+	if ((rq->rq_flags & RQF_USE_SCHED) &&
 	    q->elevator->type->ops.finish_request)
 		q->elevator->type->ops.finish_request(rq);
 
@@ -1270,7 +1273,7 @@ static void blk_add_rq_to_plug(struct blk_plug *plug, struct request *rq)
 
 	if (!plug->multiple_queues && last && last->q != rq->q)
 		plug->multiple_queues = true;
-	if (!plug->has_elevator && (rq->rq_flags & RQF_ELV))
+	if (!plug->has_elevator && (rq->rq_flags & RQF_USE_SCHED))
 		plug->has_elevator = true;
 	rq->rq_next = NULL;
 	rq_list_add(&plug->mq_list, rq);
@@ -2622,7 +2625,7 @@ static void blk_mq_try_issue_directly(struct blk_mq_hw_ctx *hctx,
 		return;
 	}
 
-	if ((rq->rq_flags & RQF_ELV) || !blk_mq_get_budget_and_tag(rq)) {
+	if ((rq->rq_flags & RQF_USE_SCHED) || !blk_mq_get_budget_and_tag(rq)) {
 		blk_mq_insert_request(rq, 0);
 		blk_mq_run_hw_queue(hctx, false);
 		return;
@@ -2711,6 +2714,7 @@ static void blk_mq_dispatch_plug_list(struct blk_plug *plug, bool from_sched)
 	struct request *requeue_list = NULL;
 	struct request **requeue_lastp = &requeue_list;
 	unsigned int depth = 0;
+	bool is_passthrough = false;
 	LIST_HEAD(list);
 
 	do {
@@ -2719,7 +2723,9 @@ static void blk_mq_dispatch_plug_list(struct blk_plug *plug, bool from_sched)
 		if (!this_hctx) {
 			this_hctx = rq->mq_hctx;
 			this_ctx = rq->mq_ctx;
-		} else if (this_hctx != rq->mq_hctx || this_ctx != rq->mq_ctx) {
+			is_passthrough = blk_rq_is_passthrough(rq);
+		} else if (this_hctx != rq->mq_hctx || this_ctx != rq->mq_ctx ||
+			   is_passthrough != blk_rq_is_passthrough(rq)) {
 			rq_list_add_tail(&requeue_lastp, rq);
 			continue;
 		}
@@ -2731,7 +2737,8 @@ static void blk_mq_dispatch_plug_list(struct blk_plug *plug, bool from_sched)
 	trace_block_unplug(this_hctx->queue, depth, !from_sched);
 
 	percpu_ref_get(&this_hctx->queue->q_usage_counter);
-	if (this_hctx->queue->elevator) {
+	/* passthrough requests should never be issued to the I/O scheduler */
+	if (this_hctx->queue->elevator && !is_passthrough) {
 		this_hctx->queue->elevator->type->ops.insert_requests(this_hctx,
 				&list, 0);
 		blk_mq_run_hw_queue(this_hctx, from_sched);
@@ -2981,7 +2988,7 @@ void blk_mq_submit_bio(struct bio *bio)
 	}
 
 	hctx = rq->mq_hctx;
-	if ((rq->rq_flags & RQF_ELV) ||
+	if ((rq->rq_flags & RQF_USE_SCHED) ||
 	    (hctx->dispatch_busy && (q->nr_hw_queues == 1 || !is_sync))) {
 		blk_mq_insert_request(rq, 0);
 		blk_mq_run_hw_queue(hctx, true);
