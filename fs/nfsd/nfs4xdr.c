@@ -2566,12 +2566,16 @@ static __be32 *encode_time_delta(__be32 *p, struct inode *inode)
 	return p;
 }
 
-static __be32 *encode_cinfo(__be32 *p, struct nfsd4_change_info *c)
+static __be32
+nfsd4_encode_change_info4(struct xdr_stream *xdr, struct nfsd4_change_info *c)
 {
-	*p++ = cpu_to_be32(c->atomic);
-	p = xdr_encode_hyper(p, c->before_change);
-	p = xdr_encode_hyper(p, c->after_change);
-	return p;
+	if (xdr_stream_encode_bool(xdr, c->atomic) < 0)
+		return nfserr_resource;
+	if (xdr_stream_encode_u64(xdr, c->before_change) < 0)
+		return nfserr_resource;
+	if (xdr_stream_encode_u64(xdr, c->after_change) < 0)
+		return nfserr_resource;
+	return nfs_ok;
 }
 
 /* Encode as an array of strings the string given with components
@@ -3689,6 +3693,30 @@ fail:
 }
 
 static __be32
+nfsd4_encode_verifier4(struct xdr_stream *xdr, const nfs4_verifier *verf)
+{
+	__be32 *p;
+
+	p = xdr_reserve_space(xdr, NFS4_VERIFIER_SIZE);
+	if (!p)
+		return nfserr_resource;
+	memcpy(p, verf->data, sizeof(verf->data));
+	return nfs_ok;
+}
+
+static __be32
+nfsd4_encode_clientid4(struct xdr_stream *xdr, const clientid_t *clientid)
+{
+	__be32 *p;
+
+	p = xdr_reserve_space(xdr, sizeof(__be64));
+	if (!p)
+		return nfserr_resource;
+	memcpy(p, clientid, sizeof(*clientid));
+	return nfs_ok;
+}
+
+static __be32
 nfsd4_encode_stateid(struct xdr_stream *xdr, stateid_t *sid)
 {
 	__be32 *p;
@@ -3752,15 +3780,8 @@ nfsd4_encode_commit(struct nfsd4_compoundres *resp, __be32 nfserr,
 		    union nfsd4_op_u *u)
 {
 	struct nfsd4_commit *commit = &u->commit;
-	struct xdr_stream *xdr = resp->xdr;
-	__be32 *p;
 
-	p = xdr_reserve_space(xdr, NFS4_VERIFIER_SIZE);
-	if (!p)
-		return nfserr_resource;
-	p = xdr_encode_opaque_fixed(p, commit->co_verf.data,
-						NFS4_VERIFIER_SIZE);
-	return 0;
+	return nfsd4_encode_verifier4(resp->xdr, &commit->co_verf);
 }
 
 static __be32
@@ -3769,12 +3790,10 @@ nfsd4_encode_create(struct nfsd4_compoundres *resp, __be32 nfserr,
 {
 	struct nfsd4_create *create = &u->create;
 	struct xdr_stream *xdr = resp->xdr;
-	__be32 *p;
 
-	p = xdr_reserve_space(xdr, 20);
-	if (!p)
-		return nfserr_resource;
-	encode_cinfo(p, &create->cr_cinfo);
+	nfserr = nfsd4_encode_change_info4(xdr, &create->cr_cinfo);
+	if (nfserr)
+		return nfserr;
 	return nfsd4_encode_bitmap(xdr, create->cr_bmval[0],
 			create->cr_bmval[1], create->cr_bmval[2]);
 }
@@ -3892,13 +3911,8 @@ nfsd4_encode_link(struct nfsd4_compoundres *resp, __be32 nfserr,
 {
 	struct nfsd4_link *link = &u->link;
 	struct xdr_stream *xdr = resp->xdr;
-	__be32 *p;
 
-	p = xdr_reserve_space(xdr, 20);
-	if (!p)
-		return nfserr_resource;
-	p = encode_cinfo(p, &link->li_cinfo);
-	return 0;
+	return nfsd4_encode_change_info4(xdr, &link->li_cinfo);
 }
 
 
@@ -3913,11 +3927,11 @@ nfsd4_encode_open(struct nfsd4_compoundres *resp, __be32 nfserr,
 	nfserr = nfsd4_encode_stateid(xdr, &open->op_stateid);
 	if (nfserr)
 		return nfserr;
-	p = xdr_reserve_space(xdr, 24);
-	if (!p)
+	nfserr = nfsd4_encode_change_info4(xdr, &open->op_cinfo);
+	if (nfserr)
+		return nfserr;
+	if (xdr_stream_encode_u32(xdr, open->op_rflags) < 0)
 		return nfserr_resource;
-	p = encode_cinfo(p, &open->op_cinfo);
-	*p++ = cpu_to_be32(open->op_rflags);
 
 	nfserr = nfsd4_encode_bitmap(xdr, open->op_bmval[0], open->op_bmval[1],
 					open->op_bmval[2]);
@@ -4213,15 +4227,9 @@ nfsd4_encode_readdir(struct nfsd4_compoundres *resp, __be32 nfserr,
 	int starting_len = xdr->buf->len;
 	__be32 *p;
 
-	p = xdr_reserve_space(xdr, NFS4_VERIFIER_SIZE);
-	if (!p)
-		return nfserr_resource;
-
-	/* XXX: Following NFSv3, we ignore the READDIR verifier for now. */
-	*p++ = cpu_to_be32(0);
-	*p++ = cpu_to_be32(0);
-	xdr->buf->head[0].iov_len = (char *)xdr->p -
-				    (char *)xdr->buf->head[0].iov_base;
+	nfserr = nfsd4_encode_verifier4(xdr, &readdir->rd_verf);
+	if (nfserr != nfs_ok)
+		return nfserr;
 
 	/*
 	 * Number of bytes left for directory entries allowing for the
@@ -4299,13 +4307,8 @@ nfsd4_encode_remove(struct nfsd4_compoundres *resp, __be32 nfserr,
 {
 	struct nfsd4_remove *remove = &u->remove;
 	struct xdr_stream *xdr = resp->xdr;
-	__be32 *p;
 
-	p = xdr_reserve_space(xdr, 20);
-	if (!p)
-		return nfserr_resource;
-	p = encode_cinfo(p, &remove->rm_cinfo);
-	return 0;
+	return nfsd4_encode_change_info4(xdr, &remove->rm_cinfo);
 }
 
 static __be32
@@ -4314,14 +4317,11 @@ nfsd4_encode_rename(struct nfsd4_compoundres *resp, __be32 nfserr,
 {
 	struct nfsd4_rename *rename = &u->rename;
 	struct xdr_stream *xdr = resp->xdr;
-	__be32 *p;
 
-	p = xdr_reserve_space(xdr, 40);
-	if (!p)
-		return nfserr_resource;
-	p = encode_cinfo(p, &rename->rn_sinfo);
-	p = encode_cinfo(p, &rename->rn_tinfo);
-	return 0;
+	nfserr = nfsd4_encode_change_info4(xdr, &rename->rn_sinfo);
+	if (nfserr)
+		return nfserr;
+	return nfsd4_encode_change_info4(xdr, &rename->rn_tinfo);
 }
 
 static __be32
@@ -4448,23 +4448,25 @@ nfsd4_encode_setclientid(struct nfsd4_compoundres *resp, __be32 nfserr,
 {
 	struct nfsd4_setclientid *scd = &u->setclientid;
 	struct xdr_stream *xdr = resp->xdr;
-	__be32 *p;
 
 	if (!nfserr) {
-		p = xdr_reserve_space(xdr, 8 + NFS4_VERIFIER_SIZE);
-		if (!p)
-			return nfserr_resource;
-		p = xdr_encode_opaque_fixed(p, &scd->se_clientid, 8);
-		p = xdr_encode_opaque_fixed(p, &scd->se_confirm,
-						NFS4_VERIFIER_SIZE);
+		nfserr = nfsd4_encode_clientid4(xdr, &scd->se_clientid);
+		if (nfserr != nfs_ok)
+			goto out;
+		nfserr = nfsd4_encode_verifier4(xdr, &scd->se_confirm);
+	} else if (nfserr == nfserr_clid_inuse) {
+		/* empty network id */
+		if (xdr_stream_encode_u32(xdr, 0) < 0) {
+			nfserr = nfserr_resource;
+			goto out;
+		}
+		/* empty universal address */
+		if (xdr_stream_encode_u32(xdr, 0) < 0) {
+			nfserr = nfserr_resource;
+			goto out;
+		}
 	}
-	else if (nfserr == nfserr_clid_inuse) {
-		p = xdr_reserve_space(xdr, 8);
-		if (!p)
-			return nfserr_resource;
-		*p++ = cpu_to_be32(0);
-		*p++ = cpu_to_be32(0);
-	}
+out:
 	return nfserr;
 }
 
@@ -4473,17 +4475,12 @@ nfsd4_encode_write(struct nfsd4_compoundres *resp, __be32 nfserr,
 		   union nfsd4_op_u *u)
 {
 	struct nfsd4_write *write = &u->write;
-	struct xdr_stream *xdr = resp->xdr;
-	__be32 *p;
 
-	p = xdr_reserve_space(xdr, 16);
-	if (!p)
+	if (xdr_stream_encode_u32(resp->xdr, write->wr_bytes_written) < 0)
 		return nfserr_resource;
-	*p++ = cpu_to_be32(write->wr_bytes_written);
-	*p++ = cpu_to_be32(write->wr_how_written);
-	p = xdr_encode_opaque_fixed(p, write->wr_verifier.data,
-						NFS4_VERIFIER_SIZE);
-	return 0;
+	if (xdr_stream_encode_u32(resp->xdr, write->wr_how_written) < 0)
+		return nfserr_resource;
+	return nfsd4_encode_verifier4(resp->xdr, &write->wr_verifier);
 }
 
 static __be32
@@ -4505,20 +4502,15 @@ nfsd4_encode_exchange_id(struct nfsd4_compoundres *resp, __be32 nfserr,
 	server_scope = nn->nfsd_name;
 	server_scope_sz = strlen(nn->nfsd_name);
 
-	p = xdr_reserve_space(xdr,
-		8 /* eir_clientid */ +
-		4 /* eir_sequenceid */ +
-		4 /* eir_flags */ +
-		4 /* spr_how */);
-	if (!p)
+	if (nfsd4_encode_clientid4(xdr, &exid->clientid) != nfs_ok)
+		return nfserr_resource;
+	if (xdr_stream_encode_u32(xdr, exid->seqid) < 0)
+		return nfserr_resource;
+	if (xdr_stream_encode_u32(xdr, exid->flags) < 0)
 		return nfserr_resource;
 
-	p = xdr_encode_opaque_fixed(p, &exid->clientid, 8);
-	*p++ = cpu_to_be32(exid->seqid);
-	*p++ = cpu_to_be32(exid->flags);
-
-	*p++ = cpu_to_be32(exid->spa_how);
-
+	if (xdr_stream_encode_u32(xdr, exid->spa_how) < 0)
+		return nfserr_resource;
 	switch (exid->spa_how) {
 	case SP4_NONE:
 		break;
@@ -5099,15 +5091,8 @@ nfsd4_encode_setxattr(struct nfsd4_compoundres *resp, __be32 nfserr,
 {
 	struct nfsd4_setxattr *setxattr = &u->setxattr;
 	struct xdr_stream *xdr = resp->xdr;
-	__be32 *p;
 
-	p = xdr_reserve_space(xdr, 20);
-	if (!p)
-		return nfserr_resource;
-
-	encode_cinfo(p, &setxattr->setxa_cinfo);
-
-	return 0;
+	return nfsd4_encode_change_info4(xdr, &setxattr->setxa_cinfo);
 }
 
 /*
@@ -5253,14 +5238,8 @@ nfsd4_encode_removexattr(struct nfsd4_compoundres *resp, __be32 nfserr,
 {
 	struct nfsd4_removexattr *removexattr = &u->removexattr;
 	struct xdr_stream *xdr = resp->xdr;
-	__be32 *p;
 
-	p = xdr_reserve_space(xdr, 20);
-	if (!p)
-		return nfserr_resource;
-
-	p = encode_cinfo(p, &removexattr->rmxa_cinfo);
-	return 0;
+	return nfsd4_encode_change_info4(xdr, &removexattr->rmxa_cinfo);
 }
 
 typedef __be32(*nfsd4_enc)(struct nfsd4_compoundres *, __be32, union nfsd4_op_u *u);
