@@ -56,6 +56,7 @@
 #define FIRMWARE_VCN_3_1_2		"amdgpu/vcn_3_1_2.bin"
 #define FIRMWARE_VCN4_0_0		"amdgpu/vcn_4_0_0.bin"
 #define FIRMWARE_VCN4_0_2		"amdgpu/vcn_4_0_2.bin"
+#define FIRMWARE_VCN4_0_3		"amdgpu/vcn_4_0_3.bin"
 #define FIRMWARE_VCN4_0_4		"amdgpu/vcn_4_0_4.bin"
 
 MODULE_FIRMWARE(FIRMWARE_RAVEN);
@@ -77,6 +78,7 @@ MODULE_FIRMWARE(FIRMWARE_YELLOW_CARP);
 MODULE_FIRMWARE(FIRMWARE_VCN_3_1_2);
 MODULE_FIRMWARE(FIRMWARE_VCN4_0_0);
 MODULE_FIRMWARE(FIRMWARE_VCN4_0_2);
+MODULE_FIRMWARE(FIRMWARE_VCN4_0_3);
 MODULE_FIRMWARE(FIRMWARE_VCN4_0_4);
 
 static void amdgpu_vcn_idle_work_handler(struct work_struct *work);
@@ -233,11 +235,11 @@ int amdgpu_vcn_sw_fini(struct amdgpu_device *adev)
 		if (adev->vcn.harvest_config & (1 << j))
 			continue;
 
-		if (adev->vcn.indirect_sram) {
-			amdgpu_bo_free_kernel(&adev->vcn.inst[j].dpg_sram_bo,
-						  &adev->vcn.inst[j].dpg_sram_gpu_addr,
-						  (void **)&adev->vcn.inst[j].dpg_sram_cpu_addr);
-		}
+		amdgpu_bo_free_kernel(
+			&adev->vcn.inst[j].dpg_sram_bo,
+			&adev->vcn.inst[j].dpg_sram_gpu_addr,
+			(void **)&adev->vcn.inst[j].dpg_sram_cpu_addr);
+
 		kvfree(adev->vcn.inst[j].saved_bo);
 
 		amdgpu_bo_free_kernel(&adev->vcn.inst[j].vcpu_bo,
@@ -993,11 +995,14 @@ error:
 
 int amdgpu_vcn_unified_ring_test_ib(struct amdgpu_ring *ring, long timeout)
 {
+	struct amdgpu_device *adev = ring->adev;
 	long r;
 
-	r = amdgpu_vcn_enc_ring_test_ib(ring, timeout);
-	if (r)
-		goto error;
+	if (adev->ip_versions[UVD_HWIP][0] != IP_VERSION(4, 0, 3)) {
+		r = amdgpu_vcn_enc_ring_test_ib(ring, timeout);
+		if (r)
+			goto error;
+	}
 
 	r =  amdgpu_vcn_dec_sw_ring_test_ib(ring, timeout);
 
@@ -1041,6 +1046,9 @@ void amdgpu_vcn_setup_ucode(struct amdgpu_device *adev)
 			adev->firmware.ucode[idx].fw = adev->vcn.fw;
 			adev->firmware.fw_size +=
 				ALIGN(le32_to_cpu(hdr->ucode_size_bytes), PAGE_SIZE);
+
+			if (adev->ip_versions[UVD_HWIP][0] == IP_VERSION(4, 0, 3))
+				break;
 		}
 		dev_info(adev->dev, "Will use PSP to load VCN firmware\n");
 	}
