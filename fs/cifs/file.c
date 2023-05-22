@@ -3353,6 +3353,7 @@ static size_t cifs_limit_bvec_subset(const struct iov_iter *iter, size_t max_siz
 	while (n && ix < nbv) {
 		len = min3(n, bvecs[ix].bv_len - skip, max_size);
 		span += len;
+		max_size -= len;
 		nsegs++;
 		ix++;
 		if (span >= max_size || nsegs >= max_segs)
