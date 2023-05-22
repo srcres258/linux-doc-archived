@@ -308,6 +308,11 @@ static void handle_break(struct pt_regs *regs)
 		return;
 	}
 #endif
+        if (IS_ENABLED(CONFIG_LIGHTWEIGHT_SPINLOCK_CHECK) &&
+		(iir == SPINLOCK_BREAK_INSN) &&
+		!user_mode(regs)) {
+		die_if_kernel("Spinlock was trashed", regs, 1);
+	}
 
 	if (unlikely(iir != GDB_BREAK_INSN))
 		parisc_printk_ratelimited(0, regs,
