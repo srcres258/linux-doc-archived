@@ -309,6 +309,14 @@ config TLB_PTLOCK
 	  updated consistently on SMP machines at the expense of some
 	  loss in performance.
 
+config LIGHTWEIGHT_SPINLOCK_CHECK
+	bool "Add lightweight spinlock checks"
+	default y
+	help
+	  Add lightweight checks to the spinlock functions to catch
+	  memory overwrites at runtime. Those checks will not detect
+	  uninitialized spinlocks.
+
 config HOTPLUG_CPU
 	bool
 	default y if SMP
