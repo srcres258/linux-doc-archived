@@ -130,6 +130,10 @@ config PM
 config STACKTRACE_SUPPORT
 	def_bool y
 
+config LOCKDEP_SUPPORT
+	bool
+	default y
+
 config ISA_DMA_API
 	bool
 
@@ -308,6 +312,14 @@ config TLB_PTLOCK
 	  fault handler. This ensures that page table entries are
 	  updated consistently on SMP machines at the expense of some
 	  loss in performance.
+
+config LIGHTWEIGHT_SPINLOCK_CHECK
+	bool "Add lightweight spinlock checks"
+	default y
+	help
+	  Add lightweight checks to the spinlock functions to catch
+	  memory overwrites at runtime. Those checks will not detect
+	  uninitialized spinlocks.
 
 config HOTPLUG_CPU
 	bool
