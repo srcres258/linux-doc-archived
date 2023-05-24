@@ -2281,17 +2281,12 @@ static struct ctl_table dev_table[] = {
 	{ }
 };
 
-DECLARE_SYSCTL_BASE(kernel, kern_table);
-DECLARE_SYSCTL_BASE(vm, vm_table);
-DECLARE_SYSCTL_BASE(debug, debug_table);
-DECLARE_SYSCTL_BASE(dev, dev_table);
-
 int __init sysctl_init_bases(void)
 {
-	register_sysctl_base(kernel);
-	register_sysctl_base(vm);
-	register_sysctl_base(debug);
-	register_sysctl_base(dev);
+	register_sysctl_init("kernel", kern_table);
+	register_sysctl_init("vm", vm_table);
+	register_sysctl_init("debug", debug_table);
+	register_sysctl_init("dev", dev_table);
 
 	return 0;
 }
