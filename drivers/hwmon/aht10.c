@@ -80,7 +80,7 @@ struct aht10_data {
 /**
  * aht10_init() - Initialize an AHT10 chip
  * @data: the data associated with this AHT10 chip
- * Return: 0 if succesfull, 1 if not
+ * Return: 0 if successful, 1 if not
  */
 static int aht10_init(struct aht10_data *data)
 {
@@ -124,7 +124,7 @@ static int aht10_polltime_expired(struct aht10_data *data)
 /**
  * aht10_read_values() - read and parse the raw data from the AHT10
  * @data: the struct aht10_data to use for the lock
- * Return: 0 if succesfull, 1 if not
+ * Return: 0 if successful, 1 if not
  */
 static int aht10_read_values(struct aht10_data *data)
 {
@@ -135,40 +135,42 @@ static int aht10_read_values(struct aht10_data *data)
 	struct i2c_client *client = data->client;
 
 	mutex_lock(&data->lock);
-	if (aht10_polltime_expired(data)) {
-		res = i2c_master_send(client, cmd_meas, sizeof(cmd_meas));
-		if (res < 0) {
-			mutex_unlock(&data->lock);
-			return res;
-		}
-
-		usleep_range(AHT10_MEAS_DELAY,
-			     AHT10_MEAS_DELAY + AHT10_DELAY_EXTRA);
-
-		res = i2c_master_recv(client, raw_data, AHT10_MEAS_SIZE);
-		if (res != AHT10_MEAS_SIZE) {
-			mutex_unlock(&data->lock);
-			if (res >= 0)
-				return -ENODATA;
-			else
-				return res;
-		}
-
-		hum =   ((u32)raw_data[1] << 12u) |
-			((u32)raw_data[2] << 4u) |
-			((raw_data[3] & 0xF0u) >> 4u);
-
-		temp =  ((u32)(raw_data[3] & 0x0Fu) << 16u) |
-			((u32)raw_data[4] << 8u) |
-			raw_data[5];
-
-		temp = ((temp * 625) >> 15u) * 10;
-		hum = ((hum * 625) >> 16u) * 10;
-
-		data->temperature = (int)temp - 50000;
-		data->humidity = hum;
-		data->previous_poll_time = ktime_get_boottime();
+	if (!aht10_polltime_expired(data)) {
+		mutex_unlock(&data->lock);
+		return 0;
 	}
+
+	res = i2c_master_send(client, cmd_meas, sizeof(cmd_meas));
+	if (res < 0) {
+		mutex_unlock(&data->lock);
+		return res;
+	}
+
+	usleep_range(AHT10_MEAS_DELAY, AHT10_MEAS_DELAY + AHT10_DELAY_EXTRA);
+
+	res = i2c_master_recv(client, raw_data, AHT10_MEAS_SIZE);
+	if (res != AHT10_MEAS_SIZE) {
+		mutex_unlock(&data->lock);
+		if (res >= 0)
+			return -ENODATA;
+		return res;
+	}
+
+	hum =   ((u32)raw_data[1] << 12u) |
+		((u32)raw_data[2] << 4u) |
+		((raw_data[3] & 0xF0u) >> 4u);
+
+	temp =  ((u32)(raw_data[3] & 0x0Fu) << 16u) |
+		((u32)raw_data[4] << 8u) |
+		raw_data[5];
+
+	temp = ((temp * 625) >> 15u) * 10;
+	hum = ((hum * 625) >> 16u) * 10;
+
+	data->temperature = (int)temp - 50000;
+	data->humidity = hum;
+	data->previous_poll_time = ktime_get_boottime();
+
 	mutex_unlock(&data->lock);
 	return 0;
 }
@@ -334,7 +336,7 @@ static struct i2c_driver aht10_driver = {
 	.driver = {
 		.name = "aht10",
 	},
-	.probe_new  = aht10_probe,
+	.probe      = aht10_probe,
 	.id_table   = aht10_id,
 };
 
