@@ -90,9 +90,9 @@ prototypes::
 locking rules:
 	all may block
 
-==============	=============================================
+==============	==================================================
 ops		i_rwsem(inode)
-==============	=============================================
+==============	==================================================
 lookup:		shared
 create:		exclusive
 link:		exclusive (both)
@@ -116,8 +116,8 @@ atomic_open:	shared (exclusive if O_CREAT is set in open flags)
 tmpfile:	no
 fileattr_get:	no or exclusive
 fileattr_set:	exclusive
-get_offset_ctx: no
-==============	=============================================
+get_offset_ctx  no
+==============	==================================================
 
 
 	Additionally, ->rmdir(), ->unlink() and ->rename() have ->i_rwsem

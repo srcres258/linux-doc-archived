@@ -662,7 +662,7 @@ static __latent_entropy int dup_mmap(struct mm_struct *mm,
 	/* Disallow any page faults before calling flush_cache_dup_mm */
 	for_each_vma(old_vmi, mpnt)
 		vma_start_write(mpnt);
-	vma_iter_init(&old_vmi, oldmm, 0);
+	vma_iter_set(&old_vmi, 0);
 #endif
 	flush_cache_dup_mm(oldmm);
 	uprobe_dup_mmap(oldmm, mm);
