@@ -686,32 +686,24 @@ bool ovl_init_uuid_xattr(struct super_block *sb, struct ovl_fs *ofs,
 	bool set = false;
 	int res;
 
-	if (ofs->config.uuid == OVL_UUID_OFF ||
-	    ofs->config.uuid == OVL_UUID_NULL)
-		return 0;
-
 	/* Try to load existing persistent uuid */
-	if (!ofs->noxattr) {
-		res = ovl_path_getxattr(ofs, upperpath, OVL_XATTR_UUID,
-					sb->s_uuid.b, UUID_SIZE);
-		if (res == UUID_SIZE)
-			return true;
+	res = ovl_path_getxattr(ofs, upperpath, OVL_XATTR_UUID, sb->s_uuid.b,
+				UUID_SIZE);
+	if (res == UUID_SIZE)
+		return true;
 
-		if (res != -ENODATA)
-			goto out;
-	}
+	if (res != -ENODATA)
+		goto fail;
 
 	/*
-	 * With uuid=auto, if uuid xattr not found, set persistent uuid for new
-	 * overlays on first mount where upper root dir is not marked as impure.
+	 * With uuid=auto, if uuid xattr is found, it will be used.
+	 * If uuid xattrs is not found, generate a persistent uuid only on mount
+	 * of new overlays where upper root dir is not yet marked as impure.
 	 * An upper dir is marked as impure on copy up or lookup of its subdirs.
 	 */
 	if (ofs->config.uuid == OVL_UUID_AUTO) {
-		if (ofs->noxattr)
-			return true;
-
-		res = ovl_path_getxattr(ofs, upperpath, OVL_XATTR_IMPURE,
-					NULL, 0);
+		res = ovl_path_getxattr(ofs, upperpath, OVL_XATTR_IMPURE, NULL,
+					0);
 		if (res > 0) {
 			/* Any mount of old overlay - downgrade to uuid=null */
 			ofs->config.uuid = OVL_UUID_NULL;
@@ -720,25 +712,25 @@ bool ovl_init_uuid_xattr(struct super_block *sb, struct ovl_fs *ofs,
 			/* First mount of new overlay - upgrade to uuid=on */
 			ofs->config.uuid = OVL_UUID_ON;
 		} else if (res < 0) {
-			goto out;
+			goto fail;
 		}
 
 	}
 
 	/* Generate overlay instance uuid */
 	uuid_gen(&sb->s_uuid);
-	if (ofs->noxattr)
-		return true;
 
 	/* Try to store persistent uuid */
 	set = true;
-	res = ovl_setxattr(ofs, upperpath->dentry, OVL_XATTR_UUID,
-			   sb->s_uuid.b, UUID_SIZE);
+	res = ovl_setxattr(ofs, upperpath->dentry, OVL_XATTR_UUID, sb->s_uuid.b,
+			   UUID_SIZE);
 	if (res == 0)
 		return true;
 
-out:
-	pr_warn("failed to %s uuid (%pd2, err=%i)\n",
+fail:
+	memset(sb->s_uuid.b, 0, UUID_SIZE);
+	ofs->config.uuid = OVL_UUID_NULL;
+	pr_warn("failed to %s uuid (%pd2, err=%i); falling back to uuid=null.\n",
 		set ? "set" : "get", upperpath->dentry, res);
 	return false;
 }
@@ -1419,6 +1411,6 @@ void ovl_copyattr(struct inode *inode)
 	inode->i_mode = realinode->i_mode;
 	inode->i_atime = realinode->i_atime;
 	inode->i_mtime = realinode->i_mtime;
-	inode->i_ctime = realinode->i_ctime;
+	inode_set_ctime_to_ts(inode, inode_get_ctime(realinode));
 	i_size_write(inode, i_size_read(realinode));
 }

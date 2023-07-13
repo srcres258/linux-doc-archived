@@ -544,6 +544,17 @@ static inline bool ovl_redirect_dir(struct ovl_fs *ofs)
 	return ofs->config.redirect_mode == OVL_REDIRECT_ON;
 }
 
+static inline bool ovl_origin_uuid(struct ovl_fs *ofs)
+{
+	return ofs->config.uuid != OVL_UUID_OFF;
+}
+
+static inline bool ovl_has_fsid(struct ovl_fs *ofs)
+{
+	return ofs->config.uuid == OVL_UUID_ON ||
+	       ofs->config.uuid == OVL_UUID_AUTO;
+}
+
 /*
  * With xino=auto, we do best effort to keep all inodes on same st_dev and
  * d_ino consistent with st_ino.

@@ -4078,14 +4078,6 @@ static int alloc_profile_is_valid(u64 flags, int extended)
 	return has_single_bit_set(flags);
 }
 
-static inline int balance_need_close(struct btrfs_fs_info *fs_info)
-{
-	/* cancel requested || normal exit path */
-	return atomic_read(&fs_info->balance_cancel_req) ||
-		(atomic_read(&fs_info->balance_pause_req) == 0 &&
-		 atomic_read(&fs_info->balance_cancel_req) == 0);
-}
-
 /*
  * Validate target profile against allowed profiles and return true if it's OK.
  * Otherwise print the error message and return false.
@@ -4275,6 +4267,7 @@ int btrfs_balance(struct btrfs_fs_info *fs_info,
 	u64 num_devices;
 	unsigned seq;
 	bool reducing_redundancy;
+	bool paused = false;
 	int i;
 
 	if (btrfs_fs_closing(fs_info) ||
@@ -4405,6 +4398,7 @@ int btrfs_balance(struct btrfs_fs_info *fs_info,
 	if (ret == -ECANCELED && atomic_read(&fs_info->balance_pause_req)) {
 		btrfs_info(fs_info, "balance: paused");
 		btrfs_exclop_balance(fs_info, BTRFS_EXCLOP_BALANCE_PAUSED);
+		paused = true;
 	}
 	/*
 	 * Balance can be canceled by:
@@ -4433,8 +4427,8 @@ int btrfs_balance(struct btrfs_fs_info *fs_info,
 		btrfs_update_ioctl_balance_args(fs_info, bargs);
 	}
 
-	if ((ret && ret != -ECANCELED && ret != -ENOSPC) ||
-	    balance_need_close(fs_info)) {
+	/* We didn't pause, we can clean everything up. */
+	if (!paused) {
 		reset_balance_state(fs_info);
 		btrfs_exclop_finish(fs_info);
 	}
@@ -5755,11 +5749,25 @@ void btrfs_mapping_tree_free(struct extent_map_tree *tree)
 	}
 }
 
+static int map_num_copies(const struct map_lookup *map)
+{
+	if (map->type & BTRFS_BLOCK_GROUP_RAID5)
+		return 2;
+	if (map->type & BTRFS_BLOCK_GROUP_RAID6)
+		/*
+		 * There could be two corrupted data stripes, we need
+		 * to loop retry in order to rebuild the correct data.
+		 *
+		 * Fail a stripe at a time on every retry except the
+		 * stripe under reconstruction.
+		 */
+		return map->num_stripes;
+	return btrfs_bg_type_to_factor(map->type);
+}
+
 int btrfs_num_copies(struct btrfs_fs_info *fs_info, u64 logical, u64 len)
 {
 	struct extent_map *em;
-	struct map_lookup *map;
-	enum btrfs_raid_types index;
 	int ret = 1;
 
 	em = btrfs_get_chunk_map(fs_info, logical, len);
@@ -5772,23 +5780,7 @@ int btrfs_num_copies(struct btrfs_fs_info *fs_info, u64 logical, u64 len)
 		 */
 		return 1;
 
-	map = em->map_lookup;
-	index = btrfs_bg_flags_to_raid_index(map->type);
-
-	/* Non-RAID56, use their ncopies from btrfs_raid_array. */
-	if (!(map->type & BTRFS_BLOCK_GROUP_RAID56_MASK))
-		ret = btrfs_raid_array[index].ncopies;
-	else if (map->type & BTRFS_BLOCK_GROUP_RAID5)
-		ret = 2;
-	else if (map->type & BTRFS_BLOCK_GROUP_RAID6)
-		/*
-		 * There could be two corrupted data stripes, we need
-		 * to loop retry in order to rebuild the correct data.
-		 *
-		 * Fail a stripe at a time on every retry except the
-		 * stripe under reconstruction.
-		 */
-		ret = map->num_stripes;
+	ret = map_num_copies(em->map_lookup);
 	free_extent_map(em);
 	return ret;
 }
@@ -6226,6 +6218,45 @@ static void set_io_stripe(struct btrfs_io_stripe *dst, const struct map_lookup *
 			stripe_offset + btrfs_stripe_nr_to_offset(stripe_nr);
 }
 
+/*
+ * Map one logical range to one or more physical ranges.
+ *
+ * @length:		(Mandatory) mapped length of this run.
+ *			One logical range can be split into different segments
+ *			due to factors like zones and RAID0/5/6/10 stripe
+ *			boundaries.
+ *
+ * @bioc_ret:		(Mandatory) returned btrfs_io_context structure.
+ *			which has one or more physical ranges (btrfs_io_stripe)
+ *			recorded inside.
+ *			Caller should call btrfs_put_bioc() to free it after use.
+ *
+ * @smap:		(Optional) single physical range optimization.
+ *			If the map request can be fulfilled by one single
+ *			physical range, and this is parameter is not NULL,
+ *			then @bioc_ret would be NULL, and @smap would be
+ *			updated.
+ *
+ * @mirror_num_ret:	(Mandatory) returned mirror number if the original
+ *			value is 0.
+ *
+ *			Mirror number 0 means to choose any live mirrors.
+ *
+ *			For non-RAID56 profiles, non-zero mirror_num means
+ *			the Nth mirror. (e.g. mirror_num 1 means the first
+ *			copy).
+ *
+ *			For RAID56 profile, mirror 1 means rebuild from P and
+ *			the remaining data stripes.
+ *
+ *			For RAID6 profile, mirror > 2 means mark another
+ *			data/P stripe error and rebuild from the remaining
+ *			stripes..
+ *
+ * @need_raid_map:	(Used only for integrity checker) whether the map wants
+ *                      a full stripe map (including all data and P/Q stripes)
+ *                      for RAID56. Should always be 1 except integrity checker.
+ */
 int btrfs_map_block(struct btrfs_fs_info *fs_info, enum btrfs_map_op op,
 		    u64 logical, u64 *length,
 		    struct btrfs_io_context **bioc_ret,
@@ -6243,7 +6274,6 @@ int btrfs_map_block(struct btrfs_fs_info *fs_info, enum btrfs_map_op op,
 	int ret = 0;
 	int mirror_num = (mirror_num_ret ? *mirror_num_ret : 0);
 	int num_stripes;
-	int num_copies;
 	int max_errors = 0;
 	struct btrfs_io_context *bioc = NULL;
 	struct btrfs_dev_replace *dev_replace = &fs_info->dev_replace;
@@ -6254,15 +6284,16 @@ int btrfs_map_block(struct btrfs_fs_info *fs_info, enum btrfs_map_op op,
 
 	ASSERT(bioc_ret);
 
-	num_copies = btrfs_num_copies(fs_info, logical, fs_info->sectorsize);
-	if (mirror_num > num_copies)
-		return -EINVAL;
-
 	em = btrfs_get_chunk_map(fs_info, logical, *length);
 	if (IS_ERR(em))
 		return PTR_ERR(em);
-
 	map = em->map_lookup;
+
+	if (mirror_num > map_num_copies(map)) {
+		ret = -EINVAL;
+		goto out_free_em;
+	}
+
 	data_stripes = nr_data_stripes(map);
 
 	map_offset = logical - em->start;
@@ -6400,11 +6431,10 @@ int btrfs_map_block(struct btrfs_fs_info *fs_info, enum btrfs_map_op op,
 	 * I/O context structure.
 	 */
 	if (smap && num_alloc_stripes == 1 &&
-	    !((map->type & BTRFS_BLOCK_GROUP_RAID56_MASK) && mirror_num > 1) &&
-	    (op == BTRFS_MAP_READ || !dev_replace_is_ongoing ||
-	     !dev_replace->tgtdev)) {
+	    !((map->type & BTRFS_BLOCK_GROUP_RAID56_MASK) && mirror_num > 1)) {
 		set_io_stripe(smap, map, stripe_index, stripe_offset, stripe_nr);
-		*mirror_num_ret = mirror_num;
+		if (mirror_num_ret)
+			*mirror_num_ret = mirror_num;
 		*bioc_ret = NULL;
 		ret = 0;
 		goto out;
@@ -6472,6 +6502,7 @@ out:
 		/* Unlock and let waiting writers proceed */
 		up_read(&dev_replace->rwsem);
 	}
+out_free_em:
 	free_extent_map(em);
 	return ret;
 }

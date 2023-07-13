@@ -46,6 +46,7 @@ config KEXEC_FILE
 
 config KEXEC_SIG
 	bool "Verify kernel signature during kexec_file_load() syscall"
+	depends on ARCH_SUPPORTS_KEXEC_SIG
 	depends on KEXEC_FILE
 	help
 	  This option makes the kexec_file_load() syscall check for a valid
@@ -59,6 +60,7 @@ config KEXEC_SIG
 
 config KEXEC_SIG_FORCE
 	bool "Require a valid signature in kexec_file_load() syscall"
+	depends on ARCH_SUPPORTS_KEXEC_SIG_FORCE
 	depends on KEXEC_SIG
 	help
 	  This option makes kernel signature verification mandatory for
@@ -67,6 +69,7 @@ config KEXEC_SIG_FORCE
 config KEXEC_IMAGE_VERIFY_SIG
 	bool "Enable Image signature verification support (ARM)"
 	default ARCH_DEFAULT_KEXEC_IMAGE_VERIFY_SIG
+	depends on ARCH_SUPPORTS_KEXEC_IMAGE_VERIFY_SIG
 	depends on KEXEC_SIG
 	depends on EFI && SIGNED_PE_FILE_VERIFICATION
 	help
@@ -74,6 +77,7 @@ config KEXEC_IMAGE_VERIFY_SIG
 
 config KEXEC_BZIMAGE_VERIFY_SIG
 	bool "Enable bzImage signature verification support"
+	depends on ARCH_SUPPORTS_KEXEC_BZIMAGE_VERIFY_SIG
 	depends on KEXEC_SIG
 	depends on SIGNED_PE_FILE_VERIFICATION
 	select SYSTEM_TRUSTED_KEYRING
@@ -82,8 +86,8 @@ config KEXEC_BZIMAGE_VERIFY_SIG
 
 config KEXEC_JUMP
 	bool "kexec jump"
-	depends on KEXEC && HIBERNATION
 	depends on ARCH_SUPPORTS_KEXEC_JUMP
+	depends on KEXEC && HIBERNATION
 	help
 	  Jump between original kernel and kexeced kernel and invoke
 	  code in physical address mode via KEXEC
@@ -91,7 +95,9 @@ config KEXEC_JUMP
 config CRASH_DUMP
 	bool "kernel crash dumps"
 	depends on ARCH_SUPPORTS_CRASH_DUMP
+	depends on ARCH_SUPPORTS_KEXEC
 	select CRASH_CORE
+	select KEXEC_CORE
 	select KEXEC
 	help
 	  Generate crash dump after being started by kexec.

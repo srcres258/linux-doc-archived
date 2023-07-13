@@ -242,9 +242,9 @@ static int ovl_sync_fs(struct super_block *sb, int wait)
  */
 static int ovl_statfs(struct dentry *dentry, struct kstatfs *buf)
 {
-	struct ovl_fs *ofs = OVL_FS(dentry->d_sb);
-	struct dentry *root_dentry = dentry->d_sb->s_root;
-	uuid_t *uuid = &dentry->d_sb->s_uuid;
+	struct super_block *sb = dentry->d_sb;
+	struct ovl_fs *ofs = OVL_FS(sb);
+	struct dentry *root_dentry = sb->s_root;
 	struct path path;
 	int err;
 
@@ -254,8 +254,8 @@ static int ovl_statfs(struct dentry *dentry, struct kstatfs *buf)
 	if (!err) {
 		buf->f_namelen = ofs->namelen;
 		buf->f_type = OVERLAYFS_SUPER_MAGIC;
-		if (!uuid_is_null(uuid))
-			buf->f_fsid = uuid_to_fsid(uuid->b);
+		if (ovl_has_fsid(ofs))
+			buf->f_fsid = uuid_to_fsid(sb->s_uuid.b);
 	}
 
 	return err;
@@ -776,6 +776,10 @@ static int ovl_make_workdir(struct super_block *sb, struct ovl_fs *ofs,
 		if (ofs->config.index) {
 			ofs->config.index = false;
 			pr_warn("...falling back to index=off.\n");
+		}
+		if (ovl_has_fsid(ofs)) {
+			ofs->config.uuid = OVL_UUID_NULL;
+			pr_warn("...falling back to uuid=null.\n");
 		}
 		/*
 		 * xattr support is required for persistent st_ino.
@@ -1424,10 +1428,12 @@ int ovl_fill_super(struct super_block *sb, struct fs_context *fc)
 	if (!ovl_upper_mnt(ofs))
 		sb->s_flags |= SB_RDONLY;
 
-	if (!ofs->config.uuid && ofs->numfs > 1) {
-		ofs->config.uuid = ovl_uuid_def();
-		pr_warn("The uuid=off requires a single fs for lower and upper, falling back to uuid=%s.\n",
-			ovl_uuid_mode(&ofs->config));
+	if (!ovl_origin_uuid(ofs) && ofs->numfs > 1) {
+		pr_warn("The uuid=off requires a single fs for lower and upper, falling back to uuid=null.\n");
+		ofs->config.uuid = OVL_UUID_NULL;
+	} else if (ovl_has_fsid(ofs) && ovl_upper_mnt(ofs)) {
+		/* Use per instance persistent uuid/fsid */
+		ovl_init_uuid_xattr(sb, ofs, &ctx->upper);
 	}
 
 	/*
@@ -1465,8 +1471,8 @@ int ovl_fill_super(struct super_block *sb, struct fs_context *fc)
 	}
 
 	/*
-	 * Support encoding decodeable file handles with nfs_export=on
-	 * and encoding non-decodeable file handles with nfs_export=off
+	 * Support encoding decodable file handles with nfs_export=on
+	 * and encoding non-decodable file handles with nfs_export=off
 	 * if all layers support file handles.
 	 */
 	if (ofs->config.nfs_export)

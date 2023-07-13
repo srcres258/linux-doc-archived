@@ -29,7 +29,7 @@
 struct sigcontext {
 	struct user_regs_struct regs;  /* needs to be first */
 	union {
-		struct __or1k_fpu_state fpu;
+		unsigned long fpcsr;
 		unsigned long oldmask;	/* unused */
 	};
 };

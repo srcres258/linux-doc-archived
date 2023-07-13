@@ -39,7 +39,6 @@
 #include <linux/kernel.h>
 #include <linux/mm.h>
 #include <linux/page-flags.h>
-#include <linux/kernel-page-flags.h>
 #include <linux/sched/signal.h>
 #include <linux/sched/task.h>
 #include <linux/dax.h>
@@ -50,7 +49,6 @@
 #include <linux/swap.h>
 #include <linux/backing-dev.h>
 #include <linux/migrate.h>
-#include <linux/suspend.h>
 #include <linux/slab.h>
 #include <linux/swapops.h>
 #include <linux/hugetlb.h>
@@ -59,7 +57,6 @@
 #include <linux/memremap.h>
 #include <linux/kfifo.h>
 #include <linux/ratelimit.h>
-#include <linux/page-isolation.h>
 #include <linux/pagewalk.h>
 #include <linux/shmem_fs.h>
 #include <linux/sysctl.h>
@@ -611,7 +608,7 @@ static void collect_procs_anon(struct page *page, struct list_head *to_kill,
 
 	pgoff = page_to_pgoff(page);
 	read_lock(&tasklist_lock);
-	for_each_process (tsk) {
+	for_each_process(tsk) {
 		struct anon_vma_chain *vmac;
 		struct task_struct *t = task_early_kill(tsk, force_early);
 
@@ -655,7 +652,7 @@ static void collect_procs_file(struct page *page, struct list_head *to_kill,
 			/*
 			 * Send early kill signal to tasks where a vma covers
 			 * the page but the corrupted page is not necessarily
-			 * mapped it in its pte.
+			 * mapped in its pte.
 			 * Assume applications who requested early kill want
 			 * to be informed of all such data corruptions.
 			 */
@@ -1187,9 +1184,6 @@ static int me_huge_page(struct page_state *ps, struct page *p)
 	struct address_space *mapping;
 	bool extra_pins = false;
 
-	if (!PageHuge(hpage))
-		return MF_DELAYED;
-
 	mapping = page_mapping(hpage);
 	if (mapping) {
 		res = truncate_error_page(hpage, page_to_pfn(p), mapping);
@@ -1389,8 +1383,15 @@ static int __get_hwpoison_page(struct page *page, unsigned long flags)
 	bool hugetlb = false;
 
 	ret = get_hwpoison_hugetlb_folio(folio, &hugetlb, false);
-	if (hugetlb)
-		return ret;
+	if (hugetlb) {
+		/* Make sure hugetlb demotion did not happen from under us. */
+		if (folio == page_folio(page))
+			return ret;
+		if (ret > 0) {
+			folio_put(folio);
+			folio = page_folio(page);
+		}
+	}
 
 	/*
 	 * This check prevents from calling folio_try_get() for any
@@ -1479,8 +1480,13 @@ static int __get_unpoison_page(struct page *page)
 	bool hugetlb = false;
 
 	ret = get_hwpoison_hugetlb_folio(folio, &hugetlb, true);
-	if (hugetlb)
-		return ret;
+	if (hugetlb) {
+		/* Make sure hugetlb demotion did not happen from under us. */
+		if (folio == page_folio(page))
+			return ret;
+		if (ret > 0)
+			folio_put(folio);
+	}
 
 	/*
 	 * PageHWPoisonTakenOff pages are not only marked as PG_hwpoison,
@@ -1808,28 +1814,41 @@ EXPORT_SYMBOL_GPL(mf_dax_kill_procs);
 #endif /* CONFIG_FS_DAX */
 
 #ifdef CONFIG_HUGETLB_PAGE
-/*
- * Struct raw_hwp_page represents information about "raw error page",
- * constructing singly linked list from ->_hugetlb_hwpoison field of folio.
- */
-struct raw_hwp_page {
-	struct llist_node node;
-	struct page *page;
-};
 
-static inline struct llist_head *raw_hwp_list_head(struct folio *folio)
+bool __is_raw_hwp_subpage(struct folio *folio, struct page *subpage)
 {
-	return (struct llist_head *)&folio->_hugetlb_hwpoison;
+	struct llist_head *raw_hwp_head;
+	struct raw_hwp_page *p, *tmp;
+	bool ret = false;
+
+	if (!folio_test_hwpoison(folio))
+		return false;
+
+	/*
+	 * When RawHwpUnreliable is set, kernel lost track of which subpages
+	 * are HWPOISON. So return as if ALL subpages are HWPOISONed.
+	 */
+	if (folio_test_hugetlb_raw_hwp_unreliable(folio))
+		return true;
+
+	raw_hwp_head = raw_hwp_list_head(folio);
+	llist_for_each_entry_safe(p, tmp, raw_hwp_head->first, node) {
+		if (subpage == p->page) {
+			ret = true;
+			break;
+		}
+	}
+
+	return ret;
 }
 
 static unsigned long __folio_free_raw_hwp(struct folio *folio, bool move_flag)
 {
-	struct llist_head *head;
-	struct llist_node *t, *tnode;
+	struct llist_node *t, *tnode, *head;
 	unsigned long count = 0;
 
-	head = raw_hwp_list_head(folio);
-	llist_for_each_safe(tnode, t, head->first) {
+	head = llist_del_all(raw_hwp_list_head(folio));
+	llist_for_each_safe(tnode, t, head) {
 		struct raw_hwp_page *p = container_of(tnode, struct raw_hwp_page, node);
 
 		if (move_flag)
@@ -1839,7 +1858,6 @@ static unsigned long __folio_free_raw_hwp(struct folio *folio, bool move_flag)
 		kfree(p);
 		count++;
 	}
-	llist_del_all(head);
 	return count;
 }
 
@@ -1910,6 +1928,8 @@ static unsigned long folio_free_raw_hwp(struct folio *folio, bool move_flag)
 void folio_clear_hugetlb_hwpoison(struct folio *folio)
 {
 	if (folio_test_hugetlb_raw_hwp_unreliable(folio))
+		return;
+	if (folio_test_hugetlb_vmemmap_optimized(folio))
 		return;
 	folio_clear_hwpoison(folio);
 	folio_free_raw_hwp(folio, true);
@@ -2097,7 +2117,8 @@ static int memory_failure_dev_pagemap(unsigned long pfn, int flags,
 out:
 	/* drop pgmap ref acquired in caller */
 	put_dev_pagemap(pgmap);
-	action_result(pfn, MF_MSG_DAX, rc ? MF_FAILED : MF_RECOVERED);
+	if (rc != -EOPNOTSUPP)
+		action_result(pfn, MF_MSG_DAX, rc ? MF_FAILED : MF_RECOVERED);
 	return rc;
 }
 
@@ -2118,7 +2139,7 @@ static DEFINE_MUTEX(mf_mutex);
  * detected by a background scrubber)
  *
  * Must run in process context (e.g. a work queue) with interrupts
- * enabled and no spinlocks hold.
+ * enabled and no spinlocks held.
  *
  * Return: 0 for successfully handled the memory error,
  *         -EOPNOTSUPP for hwpoison_filter() filtered the error event,
@@ -2177,8 +2198,6 @@ try_again:
 		goto unlock_mutex;
 	}
 
-	hpage = compound_head(p);
-
 	/*
 	 * We need/can do nothing about count=0 pages.
 	 * 1) it's a free page, and therefore in safe hand:
@@ -2217,13 +2236,14 @@ try_again:
 		}
 	}
 
+	hpage = compound_head(p);
 	if (PageTransHuge(hpage)) {
 		/*
 		 * The flag must be set after the refcount is bumped
 		 * otherwise it may race with THP split.
 		 * And the flag can't be set in get_hwpoison_page() since
 		 * it is called by soft offline too and it is just called
-		 * for !MF_COUNT_INCREASE.  So here seems to be the best
+		 * for !MF_COUNT_INCREASED.  So here seems to be the best
 		 * place.
 		 *
 		 * Don't need care about the above error handling paths for
@@ -2580,10 +2600,10 @@ static bool isolate_page(struct page *page, struct list_head *pagelist)
 
 	/*
 	 * If we succeed to isolate the page, we grabbed another refcount on
-	 * the page, so we can safely drop the one we got from get_any_pages().
+	 * the page, so we can safely drop the one we got from get_any_page().
 	 * If we failed to isolate the page, it means that we cannot go further
 	 * and we will return an error, so drop the reference we got from
-	 * get_any_pages() as well.
+	 * get_any_page() as well.
 	 */
 	put_page(page);
 	return isolated;
@@ -2616,7 +2636,7 @@ static int soft_offline_in_use_page(struct page *page)
 	}
 
 	lock_page(page);
-	if (!PageHuge(page))
+	if (!huge)
 		wait_on_page_writeback(page);
 	if (PageHWPoison(page)) {
 		unlock_page(page);
@@ -2625,7 +2645,7 @@ static int soft_offline_in_use_page(struct page *page)
 		return 0;
 	}
 
-	if (!PageHuge(page) && PageLRU(page) && !PageSwapCache(page))
+	if (!huge && PageLRU(page) && !PageSwapCache(page))
 		/*
 		 * Try to invalidate first. This should work for
 		 * non dirty unmapped page cache pages.

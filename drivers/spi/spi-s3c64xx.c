@@ -684,6 +684,8 @@ static int s3c64xx_spi_config(struct s3c64xx_spi_driver_data *sdd)
 
 	if ((sdd->cur_mode & SPI_LOOP) && sdd->port_conf->has_loopback)
 		val |= S3C64XX_SPI_MODE_SELF_LOOPBACK;
+	else
+		val &= ~S3C64XX_SPI_MODE_SELF_LOOPBACK;
 
 	writel(val, regs + S3C64XX_SPI_MODE_CFG);
 
@@ -1164,11 +1166,6 @@ static int s3c64xx_spi_probe(struct platform_device *pdev)
 		return dev_err_probe(&pdev->dev, -ENODEV,
 				     "Platform_data missing!\n");
 
-	mem_res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	if (!mem_res)
-		return dev_err_probe(&pdev->dev, -ENXIO,
-				     "Unable to get SPI MEM resource\n");
-
 	irq = platform_get_irq(pdev, 0);
 	if (irq < 0)
 		return dev_err_probe(&pdev->dev, irq, "Failed to get IRQ\n");
@@ -1185,7 +1182,6 @@ static int s3c64xx_spi_probe(struct platform_device *pdev)
 	sdd->master = master;
 	sdd->cntrlr_info = sci;
 	sdd->pdev = pdev;
-	sdd->sfr_start = mem_res->start;
 	if (pdev->dev.of_node) {
 		ret = of_alias_get_id(pdev->dev.of_node, "spi");
 		if (ret < 0)
@@ -1223,9 +1219,10 @@ static int s3c64xx_spi_probe(struct platform_device *pdev)
 	if (!is_polling(sdd))
 		master->can_dma = s3c64xx_spi_can_dma;
 
-	sdd->regs = devm_ioremap_resource(&pdev->dev, mem_res);
+	sdd->regs = devm_platform_get_and_ioremap_resource(pdev, 0, &mem_res);
 	if (IS_ERR(sdd->regs))
 		return PTR_ERR(sdd->regs);
+	sdd->sfr_start = mem_res->start;
 
 	if (sci->cfg_gpio && sci->cfg_gpio())
 		return dev_err_probe(&pdev->dev, -EBUSY,

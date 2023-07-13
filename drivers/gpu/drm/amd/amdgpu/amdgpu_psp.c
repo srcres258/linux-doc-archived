@@ -201,7 +201,6 @@ static int psp_early_init(void *handle)
 	case IP_VERSION(13, 0, 3):
 	case IP_VERSION(13, 0, 5):
 	case IP_VERSION(13, 0, 8):
-	case IP_VERSION(13, 0, 10):
 	case IP_VERSION(13, 0, 11):
 		psp_v13_0_set_psp_funcs(psp);
 		psp->autoload_supported = true;
@@ -214,6 +213,7 @@ static int psp_early_init(void *handle)
 		break;
 	case IP_VERSION(13, 0, 0):
 	case IP_VERSION(13, 0, 7):
+	case IP_VERSION(13, 0, 10):
 		psp_v13_0_set_psp_funcs(psp);
 		psp->autoload_supported = true;
 		adev->psp.sup_ifwi_up = !amdgpu_sriov_vf(adev);
@@ -2448,8 +2448,8 @@ static int psp_prep_load_ip_fw_cmd_buf(struct amdgpu_firmware_info *ucode,
 	return ret;
 }
 
-static int psp_execute_non_psp_fw_load(struct psp_context *psp,
-				  struct amdgpu_firmware_info *ucode)
+int psp_execute_ip_fw_load(struct psp_context *psp,
+			   struct amdgpu_firmware_info *ucode)
 {
 	int ret = 0;
 	struct psp_gfx_cmd_resp *cmd = acquire_psp_cmd_buf(psp);
@@ -2492,7 +2492,7 @@ static int psp_load_smu_fw(struct psp_context *psp)
 			DRM_WARN("Failed to set MP1 state prepare for reload\n");
 	}
 
-	ret = psp_execute_non_psp_fw_load(psp, ucode);
+	ret = psp_execute_ip_fw_load(psp, ucode);
 
 	if (ret)
 		DRM_ERROR("PSP load smu failed!\n");
@@ -2534,7 +2534,7 @@ int psp_load_fw_list(struct psp_context *psp,
 	for (i = 0; i < ucode_count; ++i) {
 		ucode = ucode_list[i];
 		psp_print_fw_hdr(psp, ucode);
-		ret = psp_execute_non_psp_fw_load(psp, ucode);
+		ret = psp_execute_ip_fw_load(psp, ucode);
 		if (ret)
 			return ret;
 	}
@@ -2581,7 +2581,7 @@ static int psp_load_non_psp_fw(struct psp_context *psp)
 
 		psp_print_fw_hdr(psp, ucode);
 
-		ret = psp_execute_non_psp_fw_load(psp, ucode);
+		ret = psp_execute_ip_fw_load(psp, ucode);
 		if (ret)
 			return ret;
 
@@ -2918,19 +2918,6 @@ int psp_rlc_autoload_start(struct psp_context *psp)
 	release_psp_cmd_buf(psp);
 
 	return ret;
-}
-
-int psp_update_vcn_sram(struct amdgpu_device *adev, int inst_idx,
-			uint64_t cmd_gpu_addr, int cmd_size)
-{
-	struct amdgpu_firmware_info ucode = {0};
-
-	ucode.ucode_id = inst_idx ? AMDGPU_UCODE_ID_VCN1_RAM :
-		AMDGPU_UCODE_ID_VCN0_RAM;
-	ucode.mc_addr = cmd_gpu_addr;
-	ucode.ucode_size = cmd_size;
-
-	return psp_execute_non_psp_fw_load(&adev->psp, &ucode);
 }
 
 int psp_ring_cmd_submit(struct psp_context *psp,

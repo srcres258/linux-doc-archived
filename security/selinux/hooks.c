@@ -104,6 +104,8 @@
 #include "audit.h"
 #include "avc_ss.h"
 
+#define SELINUX_INODE_INIT_XATTRS 1
+
 struct selinux_state selinux_state;
 
 /* SECMARK reference count */
@@ -2288,6 +2290,19 @@ static int selinux_bprm_creds_for_exec(struct linux_binprm *bprm)
 	new_tsec->keycreate_sid = 0;
 	new_tsec->sockcreate_sid = 0;
 
+	/*
+	 * Before policy is loaded, label any task outside kernel space
+	 * as SECINITSID_INIT, so that any userspace tasks surviving from
+	 * early boot end up with a label different from SECINITSID_KERNEL
+	 * (if the policy chooses to set SECINITSID_INIT != SECINITSID_KERNEL).
+	 */
+	if (!selinux_initialized()) {
+		new_tsec->sid = SECINITSID_INIT;
+		/* also clear the exec_sid just in case */
+		new_tsec->exec_sid = 0;
+		return 0;
+	}
+
 	if (old_tsec->exec_sid) {
 		new_tsec->sid = old_tsec->exec_sid;
 		/* Reset exec SID on execve. */
@@ -2847,11 +2862,11 @@ static int selinux_dentry_create_files_as(struct dentry *dentry, int mode,
 
 static int selinux_inode_init_security(struct inode *inode, struct inode *dir,
 				       const struct qstr *qstr,
-				       const char **name,
-				       void **value, size_t *len)
+				       struct xattr *xattrs, int *xattr_count)
 {
 	const struct task_security_struct *tsec = selinux_cred(current_cred());
 	struct superblock_security_struct *sbsec;
+	struct xattr *xattr = lsm_get_xattr_slot(xattrs, xattr_count);
 	u32 newsid, clen;
 	int rc;
 	char *context;
@@ -2878,16 +2893,14 @@ static int selinux_inode_init_security(struct inode *inode, struct inode *dir,
 	    !(sbsec->flags & SBLABEL_MNT))
 		return -EOPNOTSUPP;
 
-	if (name)
-		*name = XATTR_SELINUX_SUFFIX;
-
-	if (value && len) {
+	if (xattr) {
 		rc = security_sid_to_context_force(newsid,
 						   &context, &clen);
 		if (rc)
 			return rc;
-		*value = context;
-		*len = clen;
+		xattr->value = context;
+		xattr->value_len = clen;
+		xattr->name = XATTR_SELINUX_SUFFIX;
 	}
 
 	return 0;
@@ -3762,14 +3775,12 @@ static int selinux_file_mprotect(struct vm_area_struct *vma,
 	if (default_noexec &&
 	    (prot & PROT_EXEC) && !(vma->vm_flags & VM_EXEC)) {
 		int rc = 0;
-		if (vma->vm_start >= vma->vm_mm->start_brk &&
-		    vma->vm_end <= vma->vm_mm->brk) {
+		if (vma_is_heap(vma)) {
 			rc = avc_has_perm(sid, sid, SECCLASS_PROCESS,
 					  PROCESS__EXECHEAP, NULL);
 		} else if (!vma->vm_file &&
-			   ((vma->vm_start <= vma->vm_mm->start_stack &&
-			     vma->vm_end >= vma->vm_mm->start_stack) ||
-			    vma_is_stack_for_current(vma))) {
+				(vma_is_stack(vma) ||
+				 vma_is_stack_for_current(vma))) {
 			rc = avc_has_perm(sid, sid, SECCLASS_PROCESS,
 					  PROCESS__EXECSTACK, NULL);
 		} else if (vma->vm_file && vma->anon_vma) {
@@ -4502,6 +4513,21 @@ static int sock_has_perm(struct sock *sk, u32 perms)
 	struct lsm_network_audit net = {0,};
 
 	if (sksec->sid == SECINITSID_KERNEL)
+		return 0;
+
+	/*
+	 * Before POLICYDB_CAP_USERSPACE_INITIAL_CONTEXT, sockets that
+	 * inherited the kernel context from early boot used to be skipped
+	 * here, so preserve that behavior unless the capability is set.
+	 *
+	 * By setting the capability the policy signals that it is ready
+	 * for this quirk to be fixed. Note that sockets created by a kernel
+	 * thread or a usermode helper executed without a transition will
+	 * still be skipped in this check regardless of the policycap
+	 * setting.
+	 */
+	if (!selinux_policycap_userspace_initial_context() &&
+	    sksec->sid == SECINITSID_INIT)
 		return 0;
 
 	ad.type = LSM_AUDIT_DATA_NET;
@@ -6815,6 +6841,7 @@ struct lsm_blob_sizes selinux_blob_sizes __ro_after_init = {
 	.lbs_ipc = sizeof(struct ipc_security_struct),
 	.lbs_msg_msg = sizeof(struct msg_security_struct),
 	.lbs_superblock = sizeof(struct superblock_security_struct),
+	.lbs_xattr_count = SELINUX_INODE_INIT_XATTRS,
 };
 
 #ifdef CONFIG_PERF_EVENTS

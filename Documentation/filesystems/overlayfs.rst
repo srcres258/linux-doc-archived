@@ -665,16 +665,19 @@ The UUID of overlayfs instance itself and the fsid reported by statfs(2) are
 controlled by the "uuid" mount option, which supports these values:
 
 - "null":
-    UUID of overlayfs in null, fsid is taken from upper most fs.
+    UUID of overlayfs is null. fsid is taken from upper most filesystem.
 - "off":
-    UUID of overlayfs in null, fsid is taken from upper most fs
-    and UUID of underlying layers not checked.
+    UUID of overlayfs is null. fsid is taken from upper most filesystem.
+    UUID of underlying layers is ignored.
 - "on":
-    UUID of overlayfs in generated on first mount used to report a unique fsid.
-    If upper filesystem supports xattrs, the UUID is stored in xattr
-    "trusted.overlay.uuid", making the fsid unique and persistent.
+    UUID of overlayfs is generated and used to report a unique fsid.
+    UUID is stored in xattr "trusted.overlay.uuid", making overlayfs fsid
+    unique and persistent.  This option requires an overlayfs with upper
+    filesystem that supports xattrs.
 - "auto": (default)
-    Upgrade to "uuid=on" on first time mount of new overlay filesystem.
+    UUID is taken from xattr "trusted.overlay.uuid" if it exists.
+    Upgrade to "uuid=on" on first time mount of new overlay filesystem that
+    meets the prerequites.
     Downgrade to "uuid=null" for existing overlay filesystems that were never
     mounted with "uuid=on".
 

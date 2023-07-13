@@ -73,12 +73,12 @@ static const struct constant_table ovl_parameter_uuid[] = {
 	{}
 };
 
-const char *ovl_uuid_mode(struct ovl_config *config)
+static const char *ovl_uuid_mode(struct ovl_config *config)
 {
 	return ovl_parameter_uuid[config->uuid].name;
 }
 
-int ovl_uuid_def(void)
+static int ovl_uuid_def(void)
 {
 	return OVL_UUID_AUTO;
 }
@@ -800,6 +800,11 @@ int ovl_fs_params_verify(const struct ovl_fs_context *ctx,
 	if (!config->upperdir && config->ovl_volatile) {
 		pr_info("option \"volatile\" is meaningless in a non-upper mount, ignoring it.\n");
 		config->ovl_volatile = false;
+	}
+
+	if (!config->upperdir && config->uuid == OVL_UUID_ON) {
+		pr_info("option \"uuid=on\" requires an upper fs, falling back to uuid=null.\n");
+		config->uuid = OVL_UUID_NULL;
 	}
 
 	/* Resolve verity -> metacopy dependency */
