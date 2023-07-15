@@ -877,7 +877,7 @@ static inline __le32 ext4_encode_extra_time(struct timespec64 ts)
 static inline struct timespec64 ext4_decode_extra_time(__le32 base,
 						       __le32 extra)
 {
-	struct timespec64 ts = { .tv_sec = le32_to_cpu(base) };
+	struct timespec64 ts = { .tv_sec = (signed)le32_to_cpu(base) };
 
 	if (unlikely(extra & cpu_to_le32(EXT4_EPOCH_MASK)))
 		ts.tv_sec += (u64)(le32_to_cpu(extra) & EXT4_EPOCH_MASK) << 32;

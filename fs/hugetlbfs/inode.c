@@ -293,13 +293,12 @@ static size_t adjust_range_hwpoison(struct page *page, size_t offset, size_t byt
 {
 	size_t n = 0;
 	size_t res = 0;
-	struct folio *folio = page_folio(page);
 
 	/* First subpage to start the loop. */
 	page += offset / PAGE_SIZE;
 	offset %= PAGE_SIZE;
 	while (1) {
-		if (is_raw_hwp_subpage(folio, page))
+		if (is_raw_hwpoison_page_in_hugepage(page))
 			break;
 
 		/* Safe to read n bytes without touching HWPOISON subpage. */
