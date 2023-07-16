@@ -28,10 +28,10 @@ Author: Dominik Brodowski  <linux@brodo.de>
 
 郵件列表
 ------------
-這裡有一個 CPU 頻率變化的 CVS 提交和通用列表，您可以在這裡報告bug、問題或提交補丁。要發
+這裏有一個 CPU 頻率變化的 CVS 提交和通用列表，您可以在這裏報告bug、問題或提交補丁。要發
 布消息，請發送電子郵件到 linux-pm@vger.kernel.org。
 
-連結
+鏈接
 -----
 FTP檔案:
 * ftp://ftp.linux.org.uk/pub/linux/cpufreq/
