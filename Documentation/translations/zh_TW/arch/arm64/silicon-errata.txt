@@ -9,7 +9,7 @@ help.  Contact the Chinese maintainer if this translation is outdated
 or if there is a problem with the translation.
 
 M:	Will Deacon <will.deacon@arm.com>
-zh_CN:	Fu Wei <wefu@redhat.com>
+zh_TW:	Fu Wei <wefu@redhat.com>
 zh_TW:	Hu Haowen <src.res@email.cn>
 C:	1926e54f115725a9248d0c4c65c22acaf94de4c4
 ---------------------------------------------------------------------

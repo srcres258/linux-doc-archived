@@ -28,7 +28,7 @@ Torvalds立下了此規則並確保它被落實。
    能用，那麼你就碰見迴歸問題了。注意，新內核需要使用類似配置編譯；更多相關細
    節參見下方。
 
-#. 按照 Documentation/translations/zh_CN/admin-guide/reporting-issues.rst 中
+#. 按照 Documentation/translations/zh_TW/admin-guide/reporting-issues.rst 中
    所說的報告你的問題，該文檔已經包含了所有關於迴歸的重要方面，爲了方便起見也
    複製到了下面。兩個重點：在報告主題中使用“[REGRESSION]”開頭並抄送或轉發到
    `迴歸郵件列表 <https://lore.kernel.org/regressions/>`_
@@ -71,7 +71,7 @@ Torvalds立下了此規則並確保它被落實。
 如何報告迴歸？
 ~~~~~~~~~~~~~~
 
-只需按照 Documentation/translations/zh_CN/admin-guide/reporting-issues.rst 中
+只需按照 Documentation/translations/zh_TW/admin-guide/reporting-issues.rst 中
 所說的報告你的問題，該文檔已經包含了要點。下面幾點概述了一下只在迴歸中重要的
 方面：
 
@@ -133,8 +133,8 @@ regzbot發送的每週迴歸報告，可能會出現延遲。 這樣的延誤會
 如何找到罪魁禍首？
 ~~~~~~~~~~~~~~~~~~
 
-如 Documentation/translations/zh_CN/admin-guide/reporting-issues.rst （簡要）
-和 Documentation/translations/zh_CN/admin-guide/bug-bisect.rst （詳細）中所
+如 Documentation/translations/zh_TW/admin-guide/reporting-issues.rst （簡要）
+和 Documentation/translations/zh_TW/admin-guide/bug-bisect.rst （詳細）中所
 述，執行二分。聽起來工作量很大，但大部分情況下很快就能找到罪魁禍首。如果這很
 困難或可靠地重現問題很耗時，請考慮與其他受影響的用戶合作，一起縮小搜索範圍。
 
@@ -364,7 +364,7 @@ Regzbot還支持其他一些主要由開發人員或迴歸追蹤人員使用的�
 ..
    如本文件開頭所述，本文以GPL-2.0+或CC-BY-4.0許可發行。如您想僅在CC-BY-4.0許
    可下重分發本文，請用“Linux內核開發者”作爲作者，並用如下鏈接作爲來源：
-   https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/plain/Documentation/translations/zh_CN/admin-guide/reporting-regressions.rst
+   https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/plain/Documentation/translations/zh_TW/admin-guide/reporting-regressions.rst
 ..
    注意：本RST文件內容只有在來自Linux內核源代碼時是使用CC-BY-4.0許可的，因爲經
    過處理的版本（如經內核的構建系統）可能包含來自使用更嚴格許可證的文件的內容。

@@ -284,12 +284,12 @@ Linux內核6.x版本 <http://kernel.org/>
 -----------
 
 如果您發現了一些可能由於內核缺陷所導致的問題，請參閱：
-Documentation/translations/zh_CN/admin-guide/reporting-issues.rst 。
+Documentation/translations/zh_TW/admin-guide/reporting-issues.rst 。
 
 想要理解內核錯誤報告，請參閱：
-Documentation/translations/zh_CN/admin-guide/bug-hunting.rst 。
+Documentation/translations/zh_TW/admin-guide/bug-hunting.rst 。
 
 更多用GDB調試內核的信息，請參閱：
-Documentation/translations/zh_CN/dev-tools/gdb-kernel-debugging.rst
+Documentation/translations/zh_TW/dev-tools/gdb-kernel-debugging.rst
 和 Documentation/dev-tools/kgdb.rst 。
 

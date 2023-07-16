@@ -22,8 +22,8 @@
 內核開發社區已經發展出一套用於發佈補丁的約定和過程；遵循這些約定和過程將使
 參與其中的每個人的生活更加輕鬆。本文檔試圖描述這些約定的部分細節；更多信息
 也可在以下文檔中找到
-:ref:`Documentation/translations/zh_CN/process/submitting-patches.rst <cn_submittingpatches>`
-和 :ref:`Documentation/translations/zh_CN/process/submit-checklist.rst <cn_submitchecklist>`。
+:ref:`Documentation/translations/zh_TW/process/submitting-patches.rst <tw_submittingpatches>`
+和 :ref:`Documentation/translations/zh_TW/process/submit-checklist.rst <tw_submitchecklist>`。
 
 何時寄送
 --------
@@ -154,7 +154,7 @@
 其傳遞給diff。
 
 上面提到的標籤（tag）用於描述各種開發人員如何與這個補丁的開發相關聯。
-:ref:`Documentation/translations/zh_CN/process/submitting-patches.rst <cn_submittingpatches>`
+:ref:`Documentation/translations/zh_TW/process/submitting-patches.rst <tw_submittingpatches>`
 文檔中對它們進行了詳細描述；下面是一個簡短的總結。每一行的格式如下：
 
 ::
@@ -165,14 +165,14 @@
 
  - Signed-off-by: 這是一個開發人員的證明，證明他或她有權提交補丁以包含到內核
    中。這表明同意開發者來源認證協議，其全文見
-   :ref:`Documentation/translations/zh_CN/process/submitting-patches.rst <cn_submittingpatches>`
+   :ref:`Documentation/translations/zh_TW/process/submitting-patches.rst <tw_submittingpatches>`
    如果沒有合適的簽字，則不能合併到主線中。
 
  - Co-developed-by: 聲明補丁是由多個開發人員共同創建的；當幾個人在一個補丁上
    工作時，它用於給出共同作者（除了 From: 所給出的作者之外）。由於
    Co-developed-by: 表示作者身份，所以每個共同開發人，必須緊跟在相關合作作者
    的Signed-off-by之後。具體內容和示例見以下文件
-   :ref:`Documentation/translations/zh_CN/process/submitting-patches.rst <cn_submittingpatches>`
+   :ref:`Documentation/translations/zh_TW/process/submitting-patches.rst <tw_submittingpatches>`
 
  - Acked-by: 表示另一個開發人員（通常是相關代碼的維護人員）同意補丁適合包含
    在內核中。
@@ -180,7 +180,7 @@
  - Tested-by: 聲明某人已經測試了補丁並確認它可以工作。
 
  - Reviewed-by: 表示某開發人員已經審查了補丁的正確性；有關詳細信息，請參閱
-   :ref:`Documentation/translations/zh_CN/process/submitting-patches.rst <cn_submittingpatches>`
+   :ref:`Documentation/translations/zh_TW/process/submitting-patches.rst <tw_submittingpatches>`
 
  - Reported-by: 指定報告此補丁修復的問題的用戶；此標記用於表示感謝。
 
@@ -197,7 +197,7 @@
    無法被另一端接受，並且通常不會進行任何詳細檢查。如果有任何疑問，先把補丁寄
    給你自己，讓你自己確定它是完好無損的。
 
-   :ref:`Documentation/translations/zh_CN/process/email-clients.rst <cn_email_clients>`
+   :ref:`Documentation/translations/zh_TW/process/email-clients.rst <tw_email_clients>`
    提供了一些有用的提示，可以讓特定的郵件客戶端正常發送補丁。
 
  - 你確定你的補丁沒有荒唐的錯誤嗎？您應該始終通過scripts/checkpatch.pl檢查
