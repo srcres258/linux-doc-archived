@@ -301,7 +301,7 @@ Documentation/admin-guide/reporting-regressions.rst 對此進行了更詳細的�
 添加到迴歸跟蹤列表中，以確保它不會被忽略。
 
 什麼是安全問題留給您自己判斷。在繼續之前，請考慮閱讀
-Documentation/translations/zh_CN/admin-guide/security-bugs.rst ，
+Documentation/translations/zh_TW/admin-guide/security-bugs.rst ，
 因爲它提供瞭如何最恰當地處理安全問題的額外細節。
 
 當發生了完全無法接受的糟糕事情時，此問題就是一個“非常嚴重的問題”。例如，
@@ -385,7 +385,7 @@ Linux內核破壞了它處理的數據或損壞了它運行的硬件。當內核
 核未被污染，那麼它應該以“Not infected”結束；如果你看到“Tainted:”且後跟一些
 空格和字母，那就被污染了。
 
-如果你的內核被污染了，請閱讀 Documentation/translations/zh_CN/admin-guide/tainted-kernels.rst
+如果你的內核被污染了，請閱讀 Documentation/translations/zh_TW/admin-guide/tainted-kernels.rst
 以找出原因。設法消除污染因素。通常是由以下三種因素之一引起的：
 
  1. 發生了一個可恢復的錯誤（“kernel Oops”），內核污染了自己，因爲內核知道在
@@ -798,7 +798,7 @@ Linux 首席開發者 Linus Torvalds 認爲 Linux 內核永遠不應惡化，這
 重現它。
 
 有一個叫做“二分”的過程可以來尋找變化，這在
-Documentation/translations/zh_CN/admin-guide/bug-bisect.rst 文檔中進行了詳細
+Documentation/translations/zh_TW/admin-guide/bug-bisect.rst 文檔中進行了詳細
 的描述，這個過程通常需要你構建十到二十個內核鏡像，每次都嘗試在構建下一個鏡像
 之前重現問題。是的，這需要花費一些時間，但不用擔心，它比大多數人想象的要快得多。
 多虧了“binary search二分搜索”，這將引導你在源代碼管理系統中找到導致迴歸的提交。
@@ -984,7 +984,7 @@ Documentation/admin-guide/reporting-regressions.rst ；它還提供了大量其�
 報告，請將報告的文本轉發到這些地址；但請在報告的頂部加上註釋，表明您提交了
 報告，並附上工單鏈接。
 
-更多信息請參見 Documentation/translations/zh_CN/admin-guide/security-bugs.rst 。
+更多信息請參見 Documentation/translations/zh_TW/admin-guide/security-bugs.rst 。
 
 
 發佈報告後的責任
@@ -1198,7 +1198,7 @@ FLOSS 問題報告的人看，詢問他們的意見。同時徵求他們關於�
 前一段基本粗略地概述了“二分”方法。一旦報告出來，您可能會被要求做一個正確的
 報告，因爲它允許精確地定位導致問題的確切更改（然後很容易被恢復以快速修復問題）。
 因此如果時間允許，考慮立即進行適當的二分。有關如何詳細信息，請參閱“對迴歸的
-特別關照”部分和文檔 Documentation/translations/zh_CN/admin-guide/bug-bisect.rst 。
+特別關照”部分和文檔 Documentation/translations/zh_TW/admin-guide/bug-bisect.rst 。
 如果成功二分的話，請將“罪魁禍首”的作者添加到收件人中；同時抄送所有在
 signed-off-by鏈中的人，您可以在提交消息的末尾找到。
 
@@ -1217,7 +1217,7 @@ signed-off-by鏈中的人，您可以在提交消息的末尾找到。
 
 即使是微小的、看似明顯的代碼變化，有時也會帶來新的、完全意想不到的問題。穩
 定版和長期支持內核的維護者非常清楚這一點，因此他們只對這些內核進行符合
-Documentation/translations/zh_CN/process/stable-kernel-rules.rst 中所列出的
+Documentation/translations/zh_TW/process/stable-kernel-rules.rst 中所列出的
 規則的修改。
 
 複雜或有風險的修改不符合條件，因此只能應用於主線。其他的修復很容易被回溯到

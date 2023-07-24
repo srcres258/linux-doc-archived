@@ -26,31 +26,31 @@
 的自動可用性、多種形式的社區支持以及影響內核開發方向的能力。提供給Linux內核
 的代碼必須在與GPL兼容的許可證下可用。
 
-:ref:`cn_development_process` 介紹了開發過程、內核發佈週期和合並窗口的機制。
+:ref:`tw_development_process` 介紹了開發過程、內核發佈週期和合並窗口的機制。
 涵蓋了補丁開發、審查和合並週期中的各個階段。還有一些關於工具和郵件列表的討論？
 鼓勵希望開始內核開發的開發人員跟蹤並修復缺陷以作爲初步練習。
 
 
-:ref:`cn_development_early_stage` 包括項目的早期規劃，重點是儘快讓開發社區
+:ref:`tw_development_early_stage` 包括項目的早期規劃，重點是儘快讓開發社區
 參與進來。
 
-:ref:`cn_development_coding` 是關於編程過程的；介紹了其他開發人員遇到的幾個
+:ref:`tw_development_coding` 是關於編程過程的；介紹了其他開發人員遇到的幾個
 陷阱。也涵蓋了對補丁的一些要求，並且介紹了一些工具，這些工具有助於確保內核
 補丁是正確的。
 
-:ref:`cn_development_posting` 描述發佈補丁以供評審的過程。爲了讓開發社區能
+:ref:`tw_development_posting` 描述發佈補丁以供評審的過程。爲了讓開發社區能
 認真對待，補丁必須被正確格式化和描述，並且必須發送到正確的地方。遵循本節中的
 建議有助於確保您的工作能被較好地接納。
 
-:ref:`cn_development_followthrough` 介紹了發佈補丁之後發生的事情；工作在這時
+:ref:`tw_development_followthrough` 介紹了發佈補丁之後發生的事情；工作在這時
 還遠遠沒有完成。與審閱者一起工作是開發過程中的一個重要部分；本節提供了一些
 關於如何在這個重要階段避免問題的提示。當補丁被合併到主線中時，開發人員要注意
 不要假定任務已經完成。
 
-:ref:`cn_development_advancedtopics` 介紹了兩個“高級”主題：使用Git管理補丁
+:ref:`tw_development_advancedtopics` 介紹了兩個“高級”主題：使用Git管理補丁
 和查看其他人發佈的補丁。
 
-:ref:`cn_development_conclusion` 總結了有關內核開發的更多信息，附帶有相關資源
+:ref:`tw_development_conclusion` 總結了有關內核開發的更多信息，附帶有相關資源
 鏈接。
 
 這個文檔是關於什麼的

@@ -19,9 +19,9 @@
 
 關於Linux內核開發和相關主題的信息來源很多。首先是在內核源代碼分發中找到的
 文檔目錄。頂級
-:ref:`Documentation/translations/zh_CN/process/howto.rst <cn_process_howto>`
+:ref:`Documentation/translations/zh_TW/process/howto.rst <tw_process_howto>`
 文件是一個重要的起點；
-:ref:`Documentation/translations/zh_CN/process/submitting-patches.rst <cn_submittingpatches>`
+:ref:`Documentation/translations/zh_TW/process/submitting-patches.rst <tw_submittingpatches>`
 也是所有內核開發人員都應該閱讀的內容。許多內部內核API都是使用kerneldoc機制
 記錄的；“make htmldocs”或“make pdfdocs”可用於以HTML或PDF格式生成這些文檔
 （儘管某些發行版提供的tex版本會遇到內部限制，無法正確處理文檔）。

@@ -25,8 +25,8 @@
 的改動被接受的機會.
 
 本文檔以較爲簡潔的行文給出了大量建議。關於內核開發流程如何進行的詳細信息，
-參見： Documentation/translations/zh_CN/process/development-process.rst 。
-Documentation/translations/zh_CN/process/submit-checklist.rst 給出了一系列
+參見： Documentation/translations/zh_TW/process/development-process.rst 。
+Documentation/translations/zh_TW/process/submit-checklist.rst 給出了一系列
 提交補丁之前要檢查的事項。設備樹相關的補丁，請參閱
 Documentation/devicetree/bindings/submitting-patches.rst 。
 
@@ -162,7 +162,7 @@ xyzzy do frotz”或“[I]changed xyzzy to do frotz”，就好像你在命令�
 ----------------
 
 檢查您的補丁是否違反了基本樣式規定，詳細信息參見
-Documentation/translations/zh_CN/process/coding-style.rst
+Documentation/translations/zh_TW/process/coding-style.rst
 中找到。如果不這樣做，只會浪費審閱者的時間，並且會導致你的補丁被拒絕，甚至
 可能沒有被閱讀。
 
@@ -209,7 +209,7 @@ torvalds@linux-foundation.org 。他收到的郵件很多，所以一般來說�
 如果您有修復可利用安全漏洞的補丁，請將該補丁發送到 security@kernel.org 。對於
 嚴重的bug，可以考慮短期禁令以允許分銷商（有時間）向用戶發佈補丁；在這種情況下，
 顯然不應將補丁發送到任何公共列表。
-參見 Documentation/translations/zh_CN/admin-guide/security-bugs.rst 。
+參見 Documentation/translations/zh_TW/admin-guide/security-bugs.rst 。
 
 修復已發佈內核中嚴重錯誤的補丁程序應該抄送給穩定版維護人員，方法是把以下列行
 放進補丁的籤準區（注意，不是電子郵件收件人）::
@@ -217,7 +217,7 @@ torvalds@linux-foundation.org 。他收到的郵件很多，所以一般來說�
   Cc: stable@vger.kernel.org
 
 除了本文件之外，您還應該閱讀
-Documentation/translations/zh_CN/process/stable-kernel-rules.rst 。
+Documentation/translations/zh_TW/process/stable-kernel-rules.rst 。
 
 如果更改影響到用戶側內核接口，請向手冊頁維護人員（如維護人員文件中所列）發送
 手冊頁補丁，或至少發送更改通知，以便一些信息進入手冊頁。還應將用戶空間API
@@ -248,7 +248,7 @@ Linus 和其他的內核開發者需要閱讀和評論你提交的改動。對�
 
 例外：如果你的郵路損壞了補丁，那麼有人可能會要求你使用MIME重新發送補丁。
 
-請參閱 Documentation/translations/zh_CN/process/email-clients.rst
+請參閱 Documentation/translations/zh_TW/process/email-clients.rst
 以獲取有關配置電子郵件客戶端以使其不受影響地發送補丁的提示。
 
 回覆審閱意見
@@ -443,7 +443,7 @@ Fixes: 指示補丁修復了之前提交的一個問題。它可以便於確定�
 
   附加Fixes:標籤不會改變穩定內核規則流程，也不改變所有穩定版補丁抄送
   stable@vger.kernel.org的要求。有關更多信息，請閱讀
-  Documentation/translations/zh_CN/process/stable-kernel-rules.rst 。
+  Documentation/translations/zh_TW/process/stable-kernel-rules.rst 。
 
 .. _zh_the_canonical_patch_format:
 
@@ -647,7 +647,7 @@ Greg Kroah-Hartman，“如何惹惱內核子系統維護人員”
 不！！！別再發巨型補丁炸彈給linux-kernel@vger.kernel.org的人們了！
   <https://lore.kernel.org/r/20050711.125305.08322243.davem@davemloft.net>
 
-內核 Documentation/translations/zh_CN/process/coding-style.rst
+內核 Documentation/translations/zh_TW/process/coding-style.rst
 
 Linus Torvalds關於標準補丁格式的郵件
   <https://lore.kernel.org/r/Pine.LNX.4.58.0504071023190.28951@ppc970.osdl.org>

@@ -24,7 +24,7 @@ Linux內核開發人員非常重視安全性。因此我們想知道何時發現
 人員那裏獲得額外的幫助，以理解和修復安全漏洞。
 
 與任何缺陷一樣，提供的信息越多，診斷和修復就越容易。如果您不清楚哪些信息有用，
-請查看“Documentation/translations/zh_CN/admin-guide/reporting-issues.rst”中
+請查看“Documentation/translations/zh_TW/admin-guide/reporting-issues.rst”中
 概述的步驟。任何利用漏洞的攻擊代碼都非常有用，未經報告者同意不會對外發布，除
 非已經公開。
 

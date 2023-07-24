@@ -32,7 +32,7 @@
 ********
 
 內核長期以來都有其標準的代碼風格，如
-:ref:`Documentation/translations/zh_CN/process/coding-style.rst <cn_codingstyle>`
+:ref:`Documentation/translations/zh_TW/process/coding-style.rst <tw_codingstyle>`
 中所述。在多數時候，該文檔中描述的準則至多被認爲是建議性的。因此，內核中存在
 大量不符合代碼風格準則的代碼。這種代碼的存在會給內核開發人員帶來兩方面的危害。
 

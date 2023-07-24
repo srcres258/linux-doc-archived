@@ -543,7 +543,7 @@ Linux 裏這是提倡的做法，因爲這樣可以很簡單的給讀者提供�
 也可以加上它做這些事情的原因。
 
 當註釋內核 API 函數時，請使用 kernel-doc 格式。詳見
-Documentation/translations/zh_CN/doc-guide/index.rst 和 scripts/kernel-doc 。
+Documentation/translations/zh_TW/doc-guide/index.rst 和 scripts/kernel-doc 。
 
 長 (多行) 註釋的首選風格是：
 
@@ -816,7 +816,7 @@ dev_info() 等等。對於那些不和某個特定設備相關連的信息，<li
 內核提供了下面的一般用途的內存分配函數：
 kmalloc(), kzalloc(), kmalloc_array(), kcalloc(), vmalloc() 和 vzalloc()。
 請參考 API 文檔以獲取有關它們的詳細信息：
-Documentation/translations/zh_CN/core-api/memory-allocation.rst 。
+Documentation/translations/zh_TW/core-api/memory-allocation.rst 。
 
 傳遞結構體大小的首選形式是這樣的：
 

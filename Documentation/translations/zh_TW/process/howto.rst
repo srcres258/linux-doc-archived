@@ -65,7 +65,7 @@ Linux內核使用GNU C和GNU工具鏈開發。雖然它遵循ISO C11標準，但
 Linux內核源代碼都是在GPL（通用公共許可證）的保護下發布的。要了解這種許可
 的細節請查看源代碼主目錄下的COPYING文件。Linux內核許可準則和如何使用
 `SPDX <https://spdx.org/>` 標誌符說明在這個文件中
-:ref:`Documentation/translations/zh_CN/process/license-rules.rst <cn_kernel_licensing>`
+:ref:`Documentation/translations/zh_TW/process/license-rules.rst <tw_kernel_licensing>`
 如果你對它還有更深入問題請聯繫律師，而不要在Linux內核郵件組上提問。因爲
 郵件組裏的人並不是律師，不要期望他們的話有法律效力。
 
@@ -91,12 +91,12 @@ Linux內核代碼中包含有大量的文檔。這些文檔對於學習如何與
   :ref:`Documentation/process/changes.rst <changes>`
     文件給出了用來編譯和使用內核所需要的最小軟件包列表。
 
-  :ref:`Documentation/translations/zh_CN/process/coding-style.rst <cn_codingstyle>`
+  :ref:`Documentation/translations/zh_TW/process/coding-style.rst <tw_codingstyle>`
     描述Linux內核的代碼風格和理由。所有新代碼需要遵守這篇文檔中定義的規
     範。大多數維護者只會接收符合規定的補丁，很多人也只會幫忙檢查符合風格
     的代碼。
 
-  :ref:`Documentation/translations/zh_CN/process/submitting-patches.rst <cn_submittingpatches>`
+  :ref:`Documentation/translations/zh_TW/process/submitting-patches.rst <tw_submittingpatches>`
 
     這兩份文檔明確描述如何創建和發送補丁，其中包括（但不僅限於)：
        - 郵件內容
@@ -115,7 +115,7 @@ Linux內核代碼中包含有大量的文檔。這些文檔對於學習如何與
 
         https://web.archive.org/web/20180829112450/http://linux.yyz.us/patch-format.html
 
-  :ref:`Documentation/translations/zh_CN/process/stable-api-nonsense.rst <cn_stable_api_nonsense>`
+  :ref:`Documentation/translations/zh_TW/process/stable-api-nonsense.rst <tw_stable_api_nonsense>`
     論證內核爲什麼特意不包括穩定的內核內部API，也就是說不包括像這樣的特
     性：
 
@@ -130,7 +130,7 @@ Linux內核代碼中包含有大量的文檔。這些文檔對於學習如何與
     如果你認爲自己發現了Linux內核的安全性問題，請根據這篇文檔中的步驟來
     提醒其他內核開發者並幫助解決這個問題。
 
-  :ref:`Documentation/translations/zh_CN/process/management-style.rst <cn_managementstyle>`
+  :ref:`Documentation/translations/zh_TW/process/management-style.rst <tw_managementstyle>`
 
     描述內核維護者的工作方法及其共有特點。這對於剛剛接觸內核開發（或者對
     它感到好奇）的人來說很重要，因爲它解釋了很多對於內核維護者獨特行爲的
@@ -333,7 +333,7 @@ MAINTAINERS文件中可以找到不同話題對應的郵件列表。
 這幾行。將你的評論加在被引用的段落之間而不要放在郵件的頂部。
 
 如果你在郵件中附帶補丁，請確認它們是可以直接閱讀的純文本（如
-:ref:`Documentation/translations/zh_CN/process/submitting-patches.rst <cn_submittingpatches>`
+:ref:`Documentation/translations/zh_TW/process/submitting-patches.rst <tw_submittingpatches>`
 文檔中所述）。內核開發者們不希望遇到附件或者被壓縮了的補丁。只有這樣才能
 保證他們可以直接評論你的每行代碼。請確保你使用的郵件發送程序不會修改空格
 和製表符。一個防範性的測試方法是先將郵件發送給自己，然後自己嘗試是否可以

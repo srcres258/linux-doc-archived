@@ -16,7 +16,7 @@ Linux內核補丁提交檢查單
 如果開發人員希望看到他們的內核補丁提交更快地被接受，那麼他們應該做一些基本
 的事情。
 
-這些都是在 Documentation/translations/zh_CN/process/submitting-patches.rst
+這些都是在 Documentation/translations/zh_TW/process/submitting-patches.rst
 和其他有關提交Linux內核補丁的文檔中提供的。
 
 1) 如果使用工具，則包括定義/聲明該工具的文件。不要依賴其他頭文件來引入您使用
@@ -39,7 +39,7 @@ Linux內核補丁提交檢查單
 4) PPC64是一種很好的交叉編譯檢查體系結構，因爲它傾向於對64位的數使用無符號
    長整型。
 
-5) 按 Documentation/translations/zh_CN/process/coding-style.rst 所述檢查您的
+5) 按 Documentation/translations/zh_TW/process/coding-style.rst 所述檢查您的
    補丁是否爲常規樣式。在提交之前使用補丁樣式檢查器 ``scripts/checkpatch.pl``
    檢查是否有輕微的衝突。您應該能夠處理您的補丁中存在的所有
    違規行爲。
@@ -54,7 +54,7 @@ Linux內核補丁提交檢查單
    回報的。
 
 9) 通過 sparse 清查。
-   （參見 Documentation/translations/zh_CN/dev-tools/sparse.rst ）
+   （參見 Documentation/translations/zh_TW/dev-tools/sparse.rst ）
 
 10) 使用 ``make checkstack`` 和 ``make namespacecheck`` 並修復他們發現的任何
     問題。

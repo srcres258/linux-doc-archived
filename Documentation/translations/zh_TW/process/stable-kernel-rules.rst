@@ -36,7 +36,7 @@
   - 沒有“理論上的競爭條件”，除非能給出競爭條件如何被利用的解釋。
   - 不能存在任何的“瑣碎的”修正（拼寫修正，去掉多餘空格之類的）。
   - 必須被相關子系統的維護者接受。
-  - 必須遵循Documentation/translations/zh_CN/process/submitting-patches.rst裏的規則。
+  - 必須遵循Documentation/translations/zh_TW/process/submitting-patches.rst裏的規則。
 
 向穩定版代碼樹提交補丁的過程：
 ------------------------------
