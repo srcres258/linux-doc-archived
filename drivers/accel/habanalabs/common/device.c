@@ -572,11 +572,6 @@ static int hl_device_release_ctrl(struct inode *inode, struct file *filp)
 	list_del(&hpriv->dev_node);
 	mutex_unlock(&hdev->fpriv_ctrl_list_lock);
 out:
-	/* release the eventfd */
-	if (hpriv->notifier_event.eventfd)
-		eventfd_ctx_put(hpriv->notifier_event.eventfd);
-
-	mutex_destroy(&hpriv->notifier_event.lock);
 	put_pid(hpriv->taskpid);
 
 	kfree(hpriv);
@@ -644,7 +639,7 @@ static void device_release_func(struct device *dev)
  * @hdev: pointer to habanalabs device structure
  * @class: pointer to the class object of the device
  * @minor: minor number of the specific device
- * @fpos: file operations to install for this device
+ * @fops: file operations to install for this device
  * @name: name of the device as it will appear in the filesystem
  * @cdev: pointer to the char device object that will be initialized
  * @dev: pointer to the device object that will be initialized
@@ -994,6 +989,20 @@ static bool is_pci_link_healthy(struct hl_device *hdev)
 	return (vendor_id == PCI_VENDOR_ID_HABANALABS);
 }
 
+static void hl_device_eq_heartbeat(struct hl_device *hdev)
+{
+	u64 event_mask = HL_NOTIFIER_EVENT_DEVICE_RESET | HL_NOTIFIER_EVENT_DEVICE_UNAVAILABLE;
+	struct asic_fixed_properties *prop = &hdev->asic_prop;
+
+	if (!prop->cpucp_info.eq_health_check_supported)
+		return;
+
+	if (hdev->eq_heartbeat_received)
+		hdev->eq_heartbeat_received = false;
+	else
+		hl_device_cond_reset(hdev, HL_DRV_RESET_HARD, event_mask);
+}
+
 static void hl_device_heartbeat(struct work_struct *work)
 {
 	struct hl_device *hdev = container_of(work, struct hl_device,
@@ -1001,8 +1010,15 @@ static void hl_device_heartbeat(struct work_struct *work)
 	struct hl_info_fw_err_info info = {0};
 	u64 event_mask = HL_NOTIFIER_EVENT_DEVICE_RESET | HL_NOTIFIER_EVENT_DEVICE_UNAVAILABLE;
 
-	if (!hl_device_operational(hdev, NULL))
+	/* Start heartbeat checks only after driver has enabled events from FW */
+	if (!hl_device_operational(hdev, NULL) || !hdev->init_done)
 		goto reschedule;
+
+	/*
+	 * For EQ health check need to check if driver received the heartbeat eq event
+	 * in order to validate the eq is working.
+	 */
+	hl_device_eq_heartbeat(hdev);
 
 	if (!hdev->asic_funcs->send_heartbeat(hdev))
 		goto reschedule;
@@ -1060,7 +1076,15 @@ static int device_late_init(struct hl_device *hdev)
 	hdev->high_pll = hdev->asic_prop.high_pll;
 
 	if (hdev->heartbeat) {
+		/*
+		 * Before scheduling the heartbeat driver will check if eq event has received.
+		 * for the first schedule we need to set the indication as true then for the next
+		 * one this indication will be true only if eq event was sent by FW.
+		 */
+		hdev->eq_heartbeat_received = true;
+
 		INIT_DELAYED_WORK(&hdev->work_heartbeat, hl_device_heartbeat);
+
 		schedule_delayed_work(&hdev->work_heartbeat,
 				usecs_to_jiffies(HL_HEARTBEAT_PER_USEC));
 	}
@@ -1995,14 +2019,6 @@ void hl_notifier_event_send_all(struct hl_device *hdev, u64 event_mask)
 		hl_notifier_event_send(&hpriv->notifier_event, event_mask);
 
 	mutex_unlock(&hdev->fpriv_list_lock);
-
-	/* control device */
-	mutex_lock(&hdev->fpriv_ctrl_list_lock);
-
-	list_for_each_entry(hpriv, &hdev->fpriv_ctrl_list, dev_node)
-		hl_notifier_event_send(&hpriv->notifier_event, event_mask);
-
-	mutex_unlock(&hdev->fpriv_ctrl_list_lock);
 }
 
 /*
@@ -2017,7 +2033,9 @@ void hl_notifier_event_send_all(struct hl_device *hdev, u64 event_mask)
 int hl_device_init(struct hl_device *hdev)
 {
 	int i, rc, cq_cnt, user_interrupt_cnt, cq_ready_cnt;
+	struct hl_ts_free_jobs *free_jobs_data;
 	bool expose_interfaces_on_err = false;
+	void *p;
 
 	/* Initialize ASIC function pointers and perform early init */
 	rc = device_early_init(hdev);
@@ -2034,7 +2052,35 @@ int hl_device_init(struct hl_device *hdev)
 			rc = -ENOMEM;
 			goto early_fini;
 		}
+
+		/* Timestamp records supported only if CQ supported in device */
+		if (hdev->asic_prop.first_available_cq[0] != USHRT_MAX) {
+			for (i = 0 ; i < user_interrupt_cnt ; i++) {
+				p = vzalloc(TIMESTAMP_FREE_NODES_NUM *
+						sizeof(struct timestamp_reg_free_node));
+				if (!p) {
+					rc = -ENOMEM;
+					goto free_usr_intr_mem;
+				}
+				free_jobs_data = &hdev->user_interrupt[i].ts_free_jobs_data;
+				free_jobs_data->free_nodes_pool = p;
+				free_jobs_data->free_nodes_length = TIMESTAMP_FREE_NODES_NUM;
+				free_jobs_data->next_avail_free_node_idx = 0;
+			}
+		}
 	}
+
+	free_jobs_data = &hdev->common_user_cq_interrupt.ts_free_jobs_data;
+	p = vzalloc(TIMESTAMP_FREE_NODES_NUM *
+				sizeof(struct timestamp_reg_free_node));
+	if (!p) {
+		rc = -ENOMEM;
+		goto free_usr_intr_mem;
+	}
+
+	free_jobs_data->free_nodes_pool = p;
+	free_jobs_data->free_nodes_length = TIMESTAMP_FREE_NODES_NUM;
+	free_jobs_data->next_avail_free_node_idx = 0;
 
 	/*
 	 * Start calling ASIC initialization. First S/W then H/W and finally
@@ -2042,7 +2088,7 @@ int hl_device_init(struct hl_device *hdev)
 	 */
 	rc = hdev->asic_funcs->sw_init(hdev);
 	if (rc)
-		goto free_usr_intr_mem;
+		goto free_common_usr_intr_mem;
 
 
 	/* initialize completion structure for multi CS wait */
@@ -2248,14 +2294,14 @@ int hl_device_init(struct hl_device *hdev)
 		"Successfully added device %s to habanalabs driver\n",
 		dev_name(&(hdev)->pdev->dev));
 
-	hdev->init_done = true;
-
 	/* After initialization is done, we are ready to receive events from
 	 * the F/W. We can't do it before because we will ignore events and if
 	 * those events are fatal, we won't know about it and the device will
 	 * be operational although it shouldn't be
 	 */
 	hdev->asic_funcs->enable_events_from_fw(hdev);
+
+	hdev->init_done = true;
 
 	return 0;
 
@@ -2281,8 +2327,17 @@ hw_queues_destroy:
 	hl_hw_queues_destroy(hdev);
 sw_fini:
 	hdev->asic_funcs->sw_fini(hdev);
+free_common_usr_intr_mem:
+	vfree(hdev->common_user_cq_interrupt.ts_free_jobs_data.free_nodes_pool);
 free_usr_intr_mem:
-	kfree(hdev->user_interrupt);
+	if (user_interrupt_cnt) {
+		for (i = 0 ; i < user_interrupt_cnt ; i++) {
+			if (!hdev->user_interrupt[i].ts_free_jobs_data.free_nodes_pool)
+				break;
+			vfree(hdev->user_interrupt[i].ts_free_jobs_data.free_nodes_pool);
+		}
+		kfree(hdev->user_interrupt);
+	}
 early_fini:
 	device_early_fini(hdev);
 out_disabled:
@@ -2307,6 +2362,7 @@ out_disabled:
  */
 void hl_device_fini(struct hl_device *hdev)
 {
+	u32 user_interrupt_cnt;
 	bool device_in_reset;
 	ktime_t timeout;
 	u64 reset_sec;
@@ -2433,7 +2489,20 @@ void hl_device_fini(struct hl_device *hdev)
 	for (i = 0 ; i < hdev->asic_prop.completion_queues_count ; i++)
 		hl_cq_fini(hdev, &hdev->completion_queue[i]);
 	kfree(hdev->completion_queue);
-	kfree(hdev->user_interrupt);
+
+	user_interrupt_cnt = hdev->asic_prop.user_dec_intr_count +
+					hdev->asic_prop.user_interrupt_count;
+
+	if (user_interrupt_cnt) {
+		if (hdev->asic_prop.first_available_cq[0] != USHRT_MAX) {
+			for (i = 0 ; i < user_interrupt_cnt ; i++)
+				vfree(hdev->user_interrupt[i].ts_free_jobs_data.free_nodes_pool);
+		}
+
+		kfree(hdev->user_interrupt);
+	}
+
+	vfree(hdev->common_user_cq_interrupt.ts_free_jobs_data.free_nodes_pool);
 
 	hl_hw_queues_destroy(hdev);
 

@@ -520,7 +520,7 @@ static int perf_pmu__new_alias(struct perf_pmu *pmu, const char *name,
 		pmu_name = pe->pmu;
 	}
 
-	alias = malloc(sizeof(*alias));
+	alias = zalloc(sizeof(*alias));
 	if (!alias)
 		return -ENOMEM;
 
@@ -774,11 +774,6 @@ char *perf_pmu__getcpuid(struct perf_pmu *pmu)
 		printed = true;
 	}
 	return cpuid;
-}
-
-__weak const struct pmu_events_table *pmu_events_table__find(void)
-{
-	return perf_pmu__find_events_table(NULL);
 }
 
 __weak const struct pmu_metrics_table *pmu_metrics_table__find(void)
@@ -2049,21 +2044,4 @@ void perf_pmu__delete(struct perf_pmu *pmu)
 	zfree(&pmu->alias_name);
 	zfree(&pmu->id);
 	free(pmu);
-}
-
-struct perf_pmu *pmu__find_core_pmu(void)
-{
-	struct perf_pmu *pmu = NULL;
-
-	while ((pmu = perf_pmus__scan_core(pmu))) {
-		/*
-		 * The cpumap should cover all CPUs. Otherwise, some CPUs may
-		 * not support some events or have different event IDs.
-		 */
-		if (RC_CHK_ACCESS(pmu->cpus)->nr != cpu__max_cpu().cpu)
-			return NULL;
-
-		return pmu;
-	}
-	return NULL;
 }

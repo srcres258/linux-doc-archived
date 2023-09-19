@@ -296,7 +296,6 @@ int hl_device_open_ctrl(struct inode *inode, struct file *filp)
 	hpriv->hdev = hdev;
 	filp->private_data = hpriv;
 
-	mutex_init(&hpriv->notifier_event.lock);
 	nonseekable_open(inode, filp);
 
 	hpriv->taskpid = get_task_pid(current, PIDTYPE_PID);
@@ -460,14 +459,14 @@ static int create_hdev(struct hl_device **dev, struct pci_dev *pdev)
 	hdev->pdev = pdev;
 
 	/* Assign status description string */
-	strncpy(hdev->status[HL_DEVICE_STATUS_OPERATIONAL], "operational", HL_STR_MAX);
-	strncpy(hdev->status[HL_DEVICE_STATUS_IN_RESET], "in reset", HL_STR_MAX);
-	strncpy(hdev->status[HL_DEVICE_STATUS_MALFUNCTION], "disabled", HL_STR_MAX);
-	strncpy(hdev->status[HL_DEVICE_STATUS_NEEDS_RESET], "needs reset", HL_STR_MAX);
-	strncpy(hdev->status[HL_DEVICE_STATUS_IN_DEVICE_CREATION],
-					"in device creation", HL_STR_MAX);
-	strncpy(hdev->status[HL_DEVICE_STATUS_IN_RESET_AFTER_DEVICE_RELEASE],
-					"in reset after device release", HL_STR_MAX);
+	strscpy(hdev->status[HL_DEVICE_STATUS_OPERATIONAL], "operational", HL_STR_MAX);
+	strscpy(hdev->status[HL_DEVICE_STATUS_IN_RESET], "in reset", HL_STR_MAX);
+	strscpy(hdev->status[HL_DEVICE_STATUS_MALFUNCTION], "disabled", HL_STR_MAX);
+	strscpy(hdev->status[HL_DEVICE_STATUS_NEEDS_RESET], "needs reset", HL_STR_MAX);
+	strscpy(hdev->status[HL_DEVICE_STATUS_IN_DEVICE_CREATION],
+				"in device creation", HL_STR_MAX);
+	strscpy(hdev->status[HL_DEVICE_STATUS_IN_RESET_AFTER_DEVICE_RELEASE],
+				"in reset after device release", HL_STR_MAX);
 
 
 	/* First, we must find out which ASIC are we handling. This is needed

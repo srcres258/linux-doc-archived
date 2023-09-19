@@ -726,8 +726,8 @@ static void intel_mst_pre_enable_dp(struct intel_atomic_state *state,
 	ret = drm_dp_add_payload_part1(&intel_dp->mst_mgr, mst_state,
 				       drm_atomic_get_mst_payload_state(mst_state, connector->port));
 	if (ret < 0)
-		drm_err(&dev_priv->drm, "Failed to create MST payload for %s: %d\n",
-			connector->base.name, ret);
+		drm_dbg_kms(&dev_priv->drm, "Failed to create MST payload for %s: %d\n",
+			    connector->base.name, ret);
 
 	/*
 	 * Before Gen 12 this is not done as part of
@@ -1110,8 +1110,10 @@ static struct drm_connector *intel_dp_add_mst_connector(struct drm_dp_mst_topolo
 	drm_dp_mst_get_port_malloc(port);
 
 	connector = &intel_connector->base;
-	ret = drm_connector_init(dev, connector, &intel_dp_mst_connector_funcs,
-				 DRM_MODE_CONNECTOR_DisplayPort);
+	ret = drm_connector_init_with_ddc(dev, connector,
+					  &intel_dp_mst_connector_funcs,
+					  DRM_MODE_CONNECTOR_DisplayPort,
+					  &port->aux.ddc);
 	if (ret) {
 		drm_dp_mst_put_port_malloc(port);
 		intel_connector_free(intel_connector);

@@ -8,7 +8,7 @@
 #ifndef HABANALABSP_H_
 #define HABANALABSP_H_
 
-#include "../include/common/cpucp_if.h"
+#include <linux/habanalabs/cpucp_if.h>
 #include "../include/common/qman_if.h"
 #include "../include/hw_ip/mmu/mmu_general.h"
 #include <uapi/drm/habanalabs_accel.h>
@@ -105,6 +105,8 @@ struct hl_fpriv;
 
 /* MMU */
 #define MMU_HASH_TABLE_BITS		7 /* 1 << 7 buckets */
+
+#define TIMESTAMP_FREE_NODES_NUM	512
 
 /**
  * enum hl_mmu_page_table_location - mmu page table location
@@ -1105,19 +1107,41 @@ enum hl_user_interrupt_type {
 };
 
 /**
+ * struct hl_ts_free_jobs - holds user interrupt ts free nodes related data
+ * @free_nodes_pool: pool of nodes to be used for free timestamp jobs
+ * @free_nodes_length: number of nodes in free_nodes_pool
+ * @next_avail_free_node_idx: index of the next free node in the pool
+ *
+ * the free nodes pool must be protected by the user interrupt lock
+ * to avoid race between different interrupts which are using the same
+ * ts buffer with different offsets.
+ */
+struct hl_ts_free_jobs {
+	struct timestamp_reg_free_node *free_nodes_pool;
+	u32				free_nodes_length;
+	u32				next_avail_free_node_idx;
+};
+
+/**
  * struct hl_user_interrupt - holds user interrupt information
  * @hdev: pointer to the device structure
+ * @ts_free_jobs_data: timestamp free jobs related data
  * @type: user interrupt type
  * @wait_list_head: head to the list of user threads pending on this interrupt
+ * @ts_list_head: head to the list of timestamp records
  * @wait_list_lock: protects wait_list_head
+ * @ts_list_lock: protects ts_list_head
  * @timestamp: last timestamp taken upon interrupt
  * @interrupt_id: msix interrupt id
  */
 struct hl_user_interrupt {
 	struct hl_device		*hdev;
+	struct hl_ts_free_jobs		ts_free_jobs_data;
 	enum hl_user_interrupt_type	type;
 	struct list_head		wait_list_head;
+	struct list_head		ts_list_head;
 	spinlock_t			wait_list_lock;
+	spinlock_t			ts_list_lock;
 	ktime_t				timestamp;
 	u32				interrupt_id;
 };
@@ -1127,11 +1151,15 @@ struct hl_user_interrupt {
  * @free_objects_node: node in the list free_obj_jobs
  * @cq_cb: pointer to cq command buffer to be freed
  * @buf: pointer to timestamp buffer to be freed
+ * @in_use: indicates whether the node still in use in workqueue thread.
+ * @dynamic_alloc: indicates whether the node was allocated dynamically in the interrupt handler
  */
 struct timestamp_reg_free_node {
 	struct list_head	free_objects_node;
 	struct hl_cb		*cq_cb;
 	struct hl_mmap_mem_buf	*buf;
+	atomic_t		in_use;
+	u8			dynamic_alloc;
 };
 
 /* struct timestamp_reg_work_obj - holds the timestamp registration free objects job
@@ -1140,11 +1168,14 @@ struct timestamp_reg_free_node {
  * @free_obj: workqueue object to free timestamp registration node objects
  * @hdev: pointer to the device structure
  * @free_obj_head: list of free jobs nodes (node type timestamp_reg_free_node)
+ * @dynamic_alloc_free_obj_head: list of free jobs nodes which were dynamically allocated in the
+ *                               interrupt handler.
  */
 struct timestamp_reg_work_obj {
 	struct work_struct	free_obj;
 	struct hl_device	*hdev;
 	struct list_head	*free_obj_head;
+	struct list_head	*dynamic_alloc_free_obj_head;
 };
 
 /* struct timestamp_reg_info - holds the timestamp registration related data.
@@ -1172,7 +1203,7 @@ struct timestamp_reg_info {
  * struct hl_user_pending_interrupt - holds a context to a user thread
  *                                    pending on an interrupt
  * @ts_reg_info: holds the timestamps registration nodes info
- * @wait_list_node: node in the list of user threads pending on an interrupt
+ * @list_node: node in the list of user threads pending on an interrupt or timestamp
  * @fence: hl fence object for interrupt completion
  * @cq_target_value: CQ target value
  * @cq_kernel_addr: CQ kernel address, to be used in the cq interrupt
@@ -1180,7 +1211,7 @@ struct timestamp_reg_info {
  */
 struct hl_user_pending_interrupt {
 	struct timestamp_reg_info	ts_reg_info;
-	struct list_head		wait_list_node;
+	struct list_head		list_node;
 	struct hl_fence			fence;
 	u64				cq_target_value;
 	u64				*cq_kernel_addr;
@@ -1379,6 +1410,8 @@ struct dynamic_fw_load_mgr {
  * @boot_err0_reg: boot_err0 register address
  * @boot_err1_reg: boot_err1 register address
  * @wait_for_preboot_timeout: timeout to poll for preboot ready
+ * @wait_for_preboot_extended_timeout: timeout to pull for preboot ready in case where we know
+ *		preboot needs longer time.
  */
 struct pre_fw_load_props {
 	u32 cpu_boot_status_reg;
@@ -1387,6 +1420,7 @@ struct pre_fw_load_props {
 	u32 boot_err0_reg;
 	u32 boot_err1_reg;
 	u32 wait_for_preboot_timeout;
+	u32 wait_for_preboot_extended_timeout;
 };
 
 /**
@@ -1780,16 +1814,19 @@ struct hl_cs_counters_atomic {
  * @phys_pg_pack: pointer to physical page pack if the dma-buf was exported
  *                where virtual memory is supported.
  * @memhash_hnode: pointer to the memhash node. this object holds the export count.
- * @device_address: physical address of the device's memory. Relevant only
- *                  if phys_pg_pack is NULL (dma-buf was exported from address).
- *                  The total size can be taken from the dmabuf object.
+ * @offset: the offset into the buffer from which the memory is exported.
+ *          Relevant only if virtual memory is supported and phys_pg_pack is being used.
+ * device_phys_addr: physical address of the device's memory. Relevant only
+ *                   if phys_pg_pack is NULL (dma-buf was exported from address).
+ *                   The total size can be taken from the dmabuf object.
  */
 struct hl_dmabuf_priv {
 	struct dma_buf			*dmabuf;
 	struct hl_ctx			*ctx;
 	struct hl_vm_phys_pg_pack	*phys_pg_pack;
 	struct hl_vm_hash_node		*memhash_hnode;
-	uint64_t			device_address;
+	u64				offset;
+	u64				device_phys_addr;
 };
 
 #define HL_CS_OUTCOME_HISTORY_LEN 256
@@ -2159,7 +2196,6 @@ struct hl_vm_hw_block_list_node {
  * @pages: the physical page array.
  * @npages: num physical pages in the pack.
  * @total_size: total size of all the pages in this list.
- * @exported_size: buffer exported size.
  * @node: used to attach to deletion list that is used when all the allocations are cleared
  *        at the teardown of the context.
  * @mapping_cnt: number of shared mappings.
@@ -2176,7 +2212,6 @@ struct hl_vm_phys_pg_pack {
 	u64			*pages;
 	u64			npages;
 	u64			total_size;
-	u64			exported_size;
 	struct list_head	node;
 	atomic_t		mapping_cnt;
 	u32			asid;
@@ -2261,7 +2296,7 @@ struct hl_notifier_event {
 /**
  * struct hl_fpriv - process information stored in FD private data.
  * @hdev: habanalabs device structure.
- * @filp: pointer to the DRM file private data structure.
+ * @file_priv: pointer to the DRM file private data structure.
  * @taskpid: current process ID.
  * @ctx: current executing context. TODO: remove for multiple ctx per process
  * @ctx_mgr: context manager to handle multiple context for this FD.
@@ -2717,6 +2752,8 @@ void hl_wreg(struct hl_device *hdev, u32 reg, u32 val);
 	usr_intr.type = intr_type; \
 	INIT_LIST_HEAD(&usr_intr.wait_list_head); \
 	spin_lock_init(&usr_intr.wait_list_lock); \
+	INIT_LIST_HEAD(&usr_intr.ts_list_head); \
+	spin_lock_init(&usr_intr.ts_list_lock); \
 })
 
 struct hwmon_chip_info;
@@ -3314,6 +3351,7 @@ struct hl_reset_info {
  *                             device.
  * @supports_ctx_switch: true if a ctx switch is required upon first submission.
  * @support_preboot_binning: true if we support read binning info from preboot.
+ * @eq_heartbeat_received: indication that eq heartbeat event has received from FW.
  * @nic_ports_mask: Controls which NIC ports are enabled. Used only for testing.
  * @fw_components: Controls which f/w components to load to the device. There are multiple f/w
  *                 stages and sometimes we want to stop at a certain stage. Used only for testing.
@@ -3474,6 +3512,7 @@ struct hl_device {
 	u8				reset_upon_device_release;
 	u8				supports_ctx_switch;
 	u8				support_preboot_binning;
+	u8				eq_heartbeat_received;
 
 	/* Parameters for bring-up to be upstreamed */
 	u64				nic_ports_mask;
@@ -3685,8 +3724,9 @@ void hl_eq_reset(struct hl_device *hdev, struct hl_eq *q);
 irqreturn_t hl_irq_handler_cq(int irq, void *arg);
 irqreturn_t hl_irq_handler_eq(int irq, void *arg);
 irqreturn_t hl_irq_handler_dec_abnrm(int irq, void *arg);
-irqreturn_t hl_irq_handler_user_interrupt(int irq, void *arg);
+irqreturn_t hl_irq_user_interrupt_handler(int irq, void *arg);
 irqreturn_t hl_irq_user_interrupt_thread_handler(int irq, void *arg);
+irqreturn_t hl_irq_eq_error_interrupt_thread_handler(int irq, void *arg);
 u32 hl_cq_inc_ptr(u32 ptr);
 
 int hl_asid_init(struct hl_device *hdev);
@@ -4002,15 +4042,6 @@ void hl_debugfs_set_state_dump(struct hl_device *hdev, char *data,
 					unsigned long length);
 
 #else
-
-static inline int hl_debugfs_device_init(struct hl_device *hdev)
-{
-	return 0;
-}
-
-static inline void hl_debugfs_device_fini(struct hl_device *hdev)
-{
-}
 
 static inline void hl_debugfs_add_device(struct hl_device *hdev)
 {

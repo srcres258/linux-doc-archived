@@ -1660,7 +1660,7 @@ F:	arch/arm*/include/asm/perf_event.h
 F:	arch/arm*/kernel/hw_breakpoint.c
 F:	arch/arm*/kernel/perf_*
 F:	drivers/perf/
-F:	include/linux/perf/arm_pmu.h
+F:	include/linux/perf/arm_pmu*.h
 
 ARM PORT
 M:	Russell King <linux@armlinux.org.uk>
@@ -3340,7 +3340,7 @@ AX.25 NETWORK LAYER
 M:	Ralf Baechle <ralf@linux-mips.org>
 L:	linux-hams@vger.kernel.org
 S:	Maintained
-W:	http://www.linux-ax25.org/
+W:	https://linux-ax25.in-berlin.de
 F:	include/net/ax25.h
 F:	include/uapi/linux/ax25.h
 F:	net/ax25/
@@ -3600,9 +3600,10 @@ F:	Documentation/devicetree/bindings/iio/accel/bosch,bma400.yaml
 F:	drivers/iio/accel/bma400*
 
 BPF JIT for ARM
-M:	Shubham Bansal <illusionist.neo@gmail.com>
+M:	Russell King <linux@armlinux.org.uk>
+M:	Puranjay Mohan <puranjay12@gmail.com>
 L:	bpf@vger.kernel.org
-S:	Odd Fixes
+S:	Maintained
 F:	arch/arm/net/
 
 BPF JIT for ARM64
@@ -4921,6 +4922,7 @@ F:	drivers/spi/spi-cs42l43*
 F:	include/dt-bindings/sound/cs*
 F:	include/linux/mfd/cs42l43*
 F:	include/sound/cs*
+F:	sound/pci/hda/cirrus*
 F:	sound/pci/hda/cs*
 F:	sound/pci/hda/hda_cs_dsp_ctl.*
 F:	sound/soc/codecs/cs*
@@ -6353,6 +6355,17 @@ F:	Documentation/networking/device_drivers/ethernet/freescale/dpaa2/switch-drive
 F:	drivers/net/ethernet/freescale/dpaa2/dpaa2-switch*
 F:	drivers/net/ethernet/freescale/dpaa2/dpsw*
 
+DPLL SUBSYSTEM
+M:	Vadim Fedorenko <vadim.fedorenko@linux.dev>
+M:	Arkadiusz Kubalewski <arkadiusz.kubalewski@intel.com>
+M:	Jiri Pirko <jiri@resnulli.us>
+L:	netdev@vger.kernel.org
+S:	Supported
+F:	Documentation/driver-api/dpll.rst
+F:	drivers/dpll/*
+F:	include/net/dpll.h
+F:	include/uapi/linux/dpll.h
+
 DRBD DRIVER
 M:	Philipp Reisner <philipp.reisner@linbit.com>
 M:	Lars Ellenberg <lars.ellenberg@linbit.com>
@@ -6927,7 +6940,9 @@ T:	git git://anongit.freedesktop.org/drm/drm-misc
 F:	Documentation/devicetree/bindings/display/bridge/
 F:	drivers/gpu/drm/bridge/
 F:	drivers/gpu/drm/drm_bridge.c
+F:	drivers/gpu/drm/drm_bridge_connector.c
 F:	include/drm/drm_bridge.h
+F:	include/drm/drm_bridge_connector.h
 
 DRM DRIVERS FOR EXYNOS
 M:	Inki Dae <inki.dae@samsung.com>
@@ -9095,6 +9110,7 @@ T:	git https://git.kernel.org/pub/scm/linux/kernel/git/ogabbay/linux.git
 F:	Documentation/ABI/testing/debugfs-driver-habanalabs
 F:	Documentation/ABI/testing/sysfs-driver-habanalabs
 F:	drivers/accel/habanalabs/
+F:	include/linux/habanalabs/
 F:	include/trace/events/habanalabs.h
 F:	include/uapi/drm/habanalabs_accel.h
 
@@ -9960,12 +9976,6 @@ F:	Documentation/devicetree/bindings/i3c/
 F:	Documentation/driver-api/i3c
 F:	drivers/i3c/
 F:	include/linux/i3c/
-
-IA64 (Itanium) PLATFORM
-L:	linux-ia64@vger.kernel.org
-S:	Orphan
-F:	Documentation/arch/ia64/
-F:	arch/ia64/
 
 IBM Operation Panel Input Driver
 M:	Eddie James <eajames@linux.ibm.com>
@@ -13643,6 +13653,7 @@ F:	drivers/net/ethernet/mellanox/mlxfw/
 
 MELLANOX HARDWARE PLATFORM SUPPORT
 M:	Hans de Goede <hdegoede@redhat.com>
+M:	Ilpo Järvinen <ilpo.jarvinen@linux.intel.com>
 M:	Mark Gross <markgross@kernel.org>
 M:	Vadim Pasternak <vadimp@nvidia.com>
 L:	platform-driver-x86@vger.kernel.org
@@ -14244,6 +14255,7 @@ F:	drivers/platform/surface/surface_gpe.c
 
 MICROSOFT SURFACE HARDWARE PLATFORM SUPPORT
 M:	Hans de Goede <hdegoede@redhat.com>
+M:	Ilpo Järvinen <ilpo.jarvinen@linux.intel.com>
 M:	Mark Gross <markgross@kernel.org>
 M:	Maximilian Luz <luzmaximilian@gmail.com>
 L:	platform-driver-x86@vger.kernel.org
@@ -14379,9 +14391,11 @@ MIPS/LOONGSON1 ARCHITECTURE
 M:	Keguang Zhang <keguang.zhang@gmail.com>
 L:	linux-mips@vger.kernel.org
 S:	Maintained
+F:	Documentation/devicetree/bindings/*/loongson,ls1*.yaml
 F:	arch/mips/include/asm/mach-loongson32/
 F:	arch/mips/loongson32/
 F:	drivers/*/*loongson1*
+F:	drivers/net/ethernet/stmicro/stmmac/dwmac-loongson1.c
 
 MIPS/LOONGSON2EF ARCHITECTURE
 M:	Jiaxun Yang <jiaxun.yang@flygoat.com>
@@ -14408,6 +14422,11 @@ S:	Odd Fixes
 W:	https://linuxtv.org
 T:	git git://linuxtv.org/media_tree.git
 F:	drivers/media/radio/radio-miropcm20*
+
+MITSUMI MM8013 FG DRIVER
+M:	Konrad Dybcio <konradybcio@kernel.org>
+F:	Documentation/devicetree/bindings/power/supply/mitsumi,mm8013.yaml
+F:	drivers/power/supply/mm8013.c
 
 MMP SUPPORT
 R:	Lubomir Rintel <lkundrak@v3.sk>
@@ -14790,7 +14809,7 @@ NETROM NETWORK LAYER
 M:	Ralf Baechle <ralf@linux-mips.org>
 L:	linux-hams@vger.kernel.org
 S:	Maintained
-W:	http://www.linux-ax25.org/
+W:	https://linux-ax25.in-berlin.de
 F:	include/net/netrom.h
 F:	include/uapi/linux/netrom.h
 F:	net/netrom/
@@ -16301,11 +16320,6 @@ M:	Guenter Roeck <linux@roeck-us.net>
 L:	linux-i2c@vger.kernel.org
 S:	Maintained
 F:	drivers/i2c/muxes/i2c-mux-pca9541.c
-
-PCDP - PRIMARY CONSOLE AND DEBUG PORT
-M:	Khalid Aziz <khalid@gonehiking.org>
-S:	Maintained
-F:	drivers/firmware/pcdp.*
 
 PCI DRIVER FOR AARDVARK (Marvell Armada 3700)
 M:	Thomas Petazzoni <thomas.petazzoni@bootlin.com>
@@ -18652,7 +18666,7 @@ ROSE NETWORK LAYER
 M:	Ralf Baechle <ralf@linux-mips.org>
 L:	linux-hams@vger.kernel.org
 S:	Maintained
-W:	http://www.linux-ax25.org/
+W:	https://linux-ax25.in-berlin.de
 F:	include/net/rose.h
 F:	include/uapi/linux/rose.h
 F:	net/rose/
@@ -23473,6 +23487,7 @@ F:	drivers/platform/x86/x86-android-tablets/
 
 X86 PLATFORM DRIVERS
 M:	Hans de Goede <hdegoede@redhat.com>
+M:	Ilpo Järvinen <ilpo.jarvinen@linux.intel.com>
 M:	Mark Gross <markgross@kernel.org>
 L:	platform-driver-x86@vger.kernel.org
 S:	Maintained

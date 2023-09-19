@@ -1412,17 +1412,16 @@ struct btrfs_device *btrfs_scan_one_device(const char *path,
 
 	if (!mount_arg_dev && btrfs_super_num_devices(disk_super) == 1 &&
 	    !(btrfs_super_flags(disk_super) & BTRFS_SUPER_FLAG_SEEDING)) {
-		dev_t	devt;
+		dev_t devt;
 
 		ret = lookup_bdev(path, &devt);
-		if (ret) {
+		if (ret)
 			btrfs_warn(NULL, "lookup bdev failed for path %s: %d",
-			path, ret);
-		}
-		btrfs_free_stale_devices(devt, NULL);
+				   path, ret);
+		else
+			btrfs_free_stale_devices(devt, NULL);
 
-		pr_debug("BTRFS (%s) skip registering single non seed device\n",
-			 path);
+		pr_debug("BTRFS: skip registering single non-seed device %s\n", path);
 		device = NULL;
 		goto free_disk_super;
 	}
@@ -6360,16 +6359,11 @@ static int set_io_stripe(struct btrfs_fs_info *fs_info, enum btrfs_map_op op,
  *			For RAID6 profile, mirror > 2 means mark another
  *			data/P stripe error and rebuild from the remaining
  *			stripes..
- *
- * @need_raid_map:	(Used only for integrity checker) whether the map wants
- *                      a full stripe map (including all data and P/Q stripes)
- *                      for RAID56. Should always be 1 except integrity checker.
  */
 int btrfs_map_block(struct btrfs_fs_info *fs_info, enum btrfs_map_op op,
 		    u64 logical, u64 *length,
 		    struct btrfs_io_context **bioc_ret,
-		    struct btrfs_io_stripe *smap, int *mirror_num_ret,
-		    int need_raid_map)
+		    struct btrfs_io_stripe *smap, int *mirror_num_ret)
 {
 	struct extent_map *em;
 	struct map_lookup *map;
@@ -6464,8 +6458,10 @@ int btrfs_map_block(struct btrfs_fs_info *fs_info, enum btrfs_map_op op,
 		}
 
 	} else if (map->type & BTRFS_BLOCK_GROUP_RAID56_MASK) {
-		if (need_raid_map && (op != BTRFS_MAP_READ || mirror_num > 1)) {
+		if (op != BTRFS_MAP_READ || mirror_num > 1) {
 			/*
+			 * Needs full stripe mapping.
+			 *
 			 * Push stripe_nr back to the start of the full stripe
 			 * For those cases needing a full stripe, @stripe_nr
 			 * is the full stripe number.
@@ -6488,19 +6484,14 @@ int btrfs_map_block(struct btrfs_fs_info *fs_info, enum btrfs_map_op op,
 			stripe_index = 0;
 			stripe_offset = 0;
 		} else {
-			/*
-			 * Mirror #0 or #1 means the original data block.
-			 * Mirror #2 is RAID5 parity block.
-			 * Mirror #3 is RAID6 Q block.
-			 */
+			ASSERT(mirror_num <= 1);
+			/* Just grab the data stripe directly. */
 			stripe_index = stripe_nr % data_stripes;
 			stripe_nr /= data_stripes;
-			if (mirror_num > 1)
-				stripe_index = data_stripes + mirror_num - 2;
 
 			/* We distribute the parity blocks across stripes */
 			stripe_index = (stripe_nr + stripe_index) % map->num_stripes;
-			if (op == BTRFS_MAP_READ && mirror_num <= 1)
+			if (op == BTRFS_MAP_READ && mirror_num < 1)
 				mirror_num = 1;
 		}
 	} else {
@@ -6564,7 +6555,7 @@ int btrfs_map_block(struct btrfs_fs_info *fs_info, enum btrfs_map_op op,
 	 *
 	 * It's still mostly the same as other profiles, just with extra rotation.
 	 */
-	if (map->type & BTRFS_BLOCK_GROUP_RAID56_MASK && need_raid_map &&
+	if (map->type & BTRFS_BLOCK_GROUP_RAID56_MASK &&
 	    (op != BTRFS_MAP_READ || mirror_num > 1)) {
 		/*
 		 * For RAID56 @stripe_nr is already the number of full stripes
@@ -6576,11 +6567,14 @@ int btrfs_map_block(struct btrfs_fs_info *fs_info, enum btrfs_map_op op,
 		 */
 		bioc->full_stripe_logical = em->start +
 			btrfs_stripe_nr_to_offset(stripe_nr * data_stripes);
-		for (i = 0; i < num_stripes; i++)
+		for (int i = 0; i < num_stripes; i++) {
 			ret = set_io_stripe(fs_info, op, logical, length,
 					    &bioc->stripes[i], map,
 					    (i + stripe_nr) % num_stripes,
 					    stripe_offset, stripe_nr);
+			if (ret < 0)
+				break;
+		}
 	} else {
 		/*
 		 * For all other non-RAID56 profiles, just copy the target
@@ -6590,6 +6584,8 @@ int btrfs_map_block(struct btrfs_fs_info *fs_info, enum btrfs_map_op op,
 			ret = set_io_stripe(fs_info, op, logical, length,
 					    &bioc->stripes[i], map, stripe_index,
 					    stripe_offset, stripe_nr);
+			if (ret < 0)
+				break;
 			stripe_index++;
 		}
 	}
@@ -8203,7 +8199,7 @@ int btrfs_map_repair_block(struct btrfs_fs_info *fs_info,
 	ASSERT(mirror_num > 0);
 
 	ret = btrfs_map_block(fs_info, BTRFS_MAP_WRITE, logical, &map_length,
-			      &bioc, smap, &mirror_ret, true);
+			      &bioc, smap, &mirror_ret);
 	if (ret < 0)
 		return ret;
 

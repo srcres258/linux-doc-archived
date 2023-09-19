@@ -42,17 +42,37 @@
 
 /*
  * Used by decompressor's startup_32() to allocate page tables for identity
- * mapping of the 4G of RAM in 4-level paging mode.
+ * mapping of the 4G of RAM in 4-level paging mode:
+ * - 1 level4 table;
+ * - 1 level3 table;
+ * - 4 level2 table that maps everything with 2M pages;
  *
- * The additional page table needed for 5-level paging is allocated from
+ * The additional level5 table needed for 5-level paging is allocated from
  * trampoline_32bit memory.
  */
 # define BOOT_INIT_PGT_SIZE	(6*4096)
 
 /*
- * Total number of page table kernel_add_identity_map() can allocate,
+ * Total number of page tables kernel_add_identity_map() can allocate,
  * including page tables consumed by startup_32().
+ *
+ * Worst-case scenario:
+ *  - 5-level paging needs 1 level5 table;
+ *  - KASLR needs to map kernel, boot_params, cmdline and randomized kernel,
+ *    assuming all of them cross 256T boundary:
+ *    + 4*2 level4 table;
+ *    + 4*2 level3 table;
+ *    + 4*2 level2 table;
+ *  - X86_VERBOSE_BOOTUP needs to map the first 2M (video RAM):
+ *    + 1 level4 table;
+ *    + 1 level3 table;
+ *    + 1 level2 table;
+ * Total: 28 tables
+ *
+ * Add 4 spare table in case decompressor touches anything beyond what is
+ * accounted above. Warn if it happens.
  */
+# define BOOT_PGT_SIZE_WARN	(28*4096)
 # define BOOT_PGT_SIZE		(32*4096)
 
 #else /* !CONFIG_X86_64 */

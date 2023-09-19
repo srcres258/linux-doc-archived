@@ -1050,6 +1050,13 @@ int ata_scsi_dev_config(struct scsi_device *sdev, struct ata_device *dev)
 		}
 	} else {
 		sdev->sector_size = ata_id_logical_sector_size(dev->id);
+
+		/*
+		 * Ask the sd driver to issue START STOP UNIT on runtime suspend
+		 * and resume only. For system level suspend/resume, devices
+		 * power state is handled directly by libata EH.
+		 */
+		sdev->manage_runtime_start_stop = 1;
 	}
 
 	/*
@@ -1093,6 +1100,7 @@ int ata_scsi_dev_alloc(struct scsi_device *sdev, struct ata_port *ap)
 	 * consumer (child) and the ata port the supplier (parent).
 	 */
 	link = device_link_add(&sdev->sdev_gendev, &ap->tdev,
+			       DL_FLAG_STATELESS |
 			       DL_FLAG_PM_RUNTIME | DL_FLAG_RPM_ACTIVE);
 	if (!link) {
 		ata_port_err(ap, "Failed to create link to scsi device %s\n",
@@ -1163,6 +1171,8 @@ void ata_scsi_slave_destroy(struct scsi_device *sdev)
 	struct ata_port *ap = ata_shost_to_port(sdev->host);
 	unsigned long flags;
 	struct ata_device *dev;
+
+	device_link_remove(&sdev->sdev_gendev, &ap->tdev);
 
 	spin_lock_irqsave(ap->lock, flags);
 	dev = __ata_scsi_find_dev(ap, sdev);
@@ -4750,11 +4760,8 @@ unlock:
 	spin_unlock_irqrestore(ap->lock, flags);
 	mutex_unlock(&ap->scsi_scan_mutex);
 
-	/*
-	 * Reschedule with a delay if scsi_rescan_device() returned an error
-	 * and the port has not been suspended.
-	 */
-	if (ret && !(ap->pflags & ATA_PFLAG_SUSPENDED))
+	/* Reschedule with a delay if scsi_rescan_device() returned an error */
+	if (ret)
 		schedule_delayed_work(&ap->scsi_rescan_task,
 				      msecs_to_jiffies(5));
 }

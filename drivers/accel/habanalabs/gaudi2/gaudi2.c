@@ -2528,7 +2528,7 @@ static int gaudi2_set_fixed_properties(struct hl_device *hdev)
 	prop->pcie_dbi_base_address = CFG_BASE + mmPCIE_DBI_BASE;
 	prop->pcie_aux_dbi_reg_addr = CFG_BASE + mmPCIE_AUX_DBI;
 
-	strncpy(prop->cpucp_info.card_name, GAUDI2_DEFAULT_CARD_NAME, CARD_NAME_MAX_LEN);
+	strscpy_pad(prop->cpucp_info.card_name, GAUDI2_DEFAULT_CARD_NAME, CARD_NAME_MAX_LEN);
 
 	prop->mme_master_slave_mode = 1;
 
@@ -2981,7 +2981,8 @@ static int gaudi2_cpucp_info_get(struct hl_device *hdev)
 	}
 
 	if (!strlen(prop->cpucp_info.card_name))
-		strncpy(prop->cpucp_info.card_name, GAUDI2_DEFAULT_CARD_NAME, CARD_NAME_MAX_LEN);
+		strscpy_pad(prop->cpucp_info.card_name, GAUDI2_DEFAULT_CARD_NAME,
+				CARD_NAME_MAX_LEN);
 
 	/* Overwrite binning masks with the actual binning values from F/W */
 	hdev->dram_binning = prop->cpucp_info.dram_binning_mask;
@@ -4174,6 +4175,8 @@ static const char *gaudi2_irq_name(u16 irq_number)
 		return "gaudi2 unexpected error";
 	case GAUDI2_IRQ_NUM_USER_FIRST ... GAUDI2_IRQ_NUM_USER_LAST:
 		return "gaudi2 user completion";
+	case GAUDI2_IRQ_NUM_EQ_ERROR:
+		return "gaudi2 eq error";
 	default:
 		return "invalid";
 	}
@@ -4224,9 +4227,7 @@ static int gaudi2_dec_enable_msix(struct hl_device *hdev)
 			rc = request_irq(irq, hl_irq_handler_dec_abnrm, 0,
 						gaudi2_irq_name(i), (void *) dec);
 		} else {
-			rc = request_threaded_irq(irq, hl_irq_handler_user_interrupt,
-					hl_irq_user_interrupt_thread_handler, IRQF_ONESHOT,
-					gaudi2_irq_name(i),
+			rc = request_irq(irq, hl_irq_user_interrupt_handler, 0, gaudi2_irq_name(i),
 					(void *) &hdev->user_interrupt[dec->core_id]);
 		}
 
@@ -4284,17 +4285,17 @@ static int gaudi2_enable_msix(struct hl_device *hdev)
 	}
 
 	irq = pci_irq_vector(hdev->pdev, GAUDI2_IRQ_NUM_TPC_ASSERT);
-	rc = request_threaded_irq(irq, hl_irq_handler_user_interrupt,
-			hl_irq_user_interrupt_thread_handler, IRQF_ONESHOT,
-			gaudi2_irq_name(GAUDI2_IRQ_NUM_TPC_ASSERT), &hdev->tpc_interrupt);
+	rc = request_threaded_irq(irq, NULL, hl_irq_user_interrupt_thread_handler, IRQF_ONESHOT,
+					gaudi2_irq_name(GAUDI2_IRQ_NUM_TPC_ASSERT),
+					&hdev->tpc_interrupt);
 	if (rc) {
 		dev_err(hdev->dev, "Failed to request IRQ %d", irq);
 		goto free_dec_irq;
 	}
 
 	irq = pci_irq_vector(hdev->pdev, GAUDI2_IRQ_NUM_UNEXPECTED_ERROR);
-	rc = request_irq(irq, hl_irq_handler_user_interrupt, 0,
-			gaudi2_irq_name(GAUDI2_IRQ_NUM_UNEXPECTED_ERROR),
+	rc = request_threaded_irq(irq, NULL, hl_irq_user_interrupt_thread_handler, IRQF_ONESHOT,
+					gaudi2_irq_name(GAUDI2_IRQ_NUM_UNEXPECTED_ERROR),
 					&hdev->unexpected_error_interrupt);
 	if (rc) {
 		dev_err(hdev->dev, "Failed to request IRQ %d", irq);
@@ -4306,14 +4307,21 @@ static int gaudi2_enable_msix(struct hl_device *hdev)
 			i++, j++, user_irq_init_cnt++) {
 
 		irq = pci_irq_vector(hdev->pdev, i);
-		rc = request_threaded_irq(irq, hl_irq_handler_user_interrupt,
-						hl_irq_user_interrupt_thread_handler, IRQF_ONESHOT,
-						gaudi2_irq_name(i), &hdev->user_interrupt[j]);
-
+		rc = request_irq(irq, hl_irq_user_interrupt_handler, 0, gaudi2_irq_name(i),
+				&hdev->user_interrupt[j]);
 		if (rc) {
 			dev_err(hdev->dev, "Failed to request IRQ %d", irq);
 			goto free_user_irq;
 		}
+	}
+
+	irq = pci_irq_vector(hdev->pdev, GAUDI2_IRQ_NUM_EQ_ERROR);
+	rc = request_threaded_irq(irq, NULL, hl_irq_eq_error_interrupt_thread_handler,
+					IRQF_ONESHOT, gaudi2_irq_name(GAUDI2_IRQ_NUM_EQ_ERROR),
+					hdev);
+	if (rc) {
+		dev_err(hdev->dev, "Failed to request IRQ %d", irq);
+		goto free_user_irq;
 	}
 
 	gaudi2->hw_cap_initialized |= HW_CAP_MSIX;
@@ -4375,6 +4383,7 @@ static void gaudi2_sync_irqs(struct hl_device *hdev)
 	}
 
 	synchronize_irq(pci_irq_vector(hdev->pdev, GAUDI2_IRQ_NUM_EVENT_QUEUE));
+	synchronize_irq(pci_irq_vector(hdev->pdev, GAUDI2_IRQ_NUM_EQ_ERROR));
 }
 
 static void gaudi2_disable_msix(struct hl_device *hdev)
@@ -4410,6 +4419,9 @@ static void gaudi2_disable_msix(struct hl_device *hdev)
 	irq = pci_irq_vector(hdev->pdev, GAUDI2_IRQ_NUM_COMPLETION);
 	cq = &hdev->completion_queue[GAUDI2_RESERVED_CQ_CS_COMPLETION];
 	free_irq(irq, cq);
+
+	irq = pci_irq_vector(hdev->pdev, GAUDI2_IRQ_NUM_EQ_ERROR);
+	free_irq(irq, hdev);
 
 	pci_free_irq_vectors(hdev->pdev);
 
@@ -4813,6 +4825,8 @@ static void gaudi2_init_firmware_preload_params(struct hl_device *hdev)
 	pre_fw_load->boot_err0_reg = mmCPU_BOOT_ERR0;
 	pre_fw_load->boot_err1_reg = mmCPU_BOOT_ERR1;
 	pre_fw_load->wait_for_preboot_timeout = GAUDI2_PREBOOT_REQ_TIMEOUT_USEC;
+	pre_fw_load->wait_for_preboot_extended_timeout =
+		GAUDI2_PREBOOT_EXTENDED_REQ_TIMEOUT_USEC;
 }
 
 static void gaudi2_init_firmware_loader(struct hl_device *hdev)
@@ -7797,11 +7811,13 @@ static inline bool is_info_event(u32 event)
 	switch (event) {
 	case GAUDI2_EVENT_CPU_CPLD_SHUTDOWN_CAUSE:
 	case GAUDI2_EVENT_CPU_FIX_POWER_ENV_S ... GAUDI2_EVENT_CPU_FIX_THERMAL_ENV_E:
+	case GAUDI2_EVENT_ARC_PWR_BRK_ENTRY ... GAUDI2_EVENT_ARC_PWR_RD_MODE3:
 
 	/* return in case of NIC status event - these events are received periodically and not as
 	 * an indication to an error.
 	 */
 	case GAUDI2_EVENT_CPU0_STATUS_NIC0_ENG0 ... GAUDI2_EVENT_CPU11_STATUS_NIC11_ENG1:
+	case GAUDI2_EVENT_ARC_EQ_HEARTBEAT:
 		return true;
 	default:
 		return false;
@@ -7833,16 +7849,29 @@ static void gaudi2_print_event(struct hl_device *hdev, u16 event_type,
 static bool gaudi2_handle_ecc_event(struct hl_device *hdev, u16 event_type,
 		struct hl_eq_ecc_data *ecc_data)
 {
-	u64 ecc_address = 0, ecc_syndrom = 0;
+	u64 ecc_address = 0, ecc_syndrome = 0;
 	u8 memory_wrapper_idx = 0;
+	bool has_block_id = false;
+	u16 block_id;
+
+	if (!hl_is_fw_sw_ver_below(hdev, 1, 12))
+		has_block_id = true;
 
 	ecc_address = le64_to_cpu(ecc_data->ecc_address);
-	ecc_syndrom = le64_to_cpu(ecc_data->ecc_syndrom);
+	ecc_syndrome = le64_to_cpu(ecc_data->ecc_syndrom);
 	memory_wrapper_idx = ecc_data->memory_wrapper_idx;
 
-	gaudi2_print_event(hdev, event_type, !ecc_data->is_critical,
-		"ECC error detected. address: %#llx. Syndrom: %#llx. block id %u. critical %u.",
-		ecc_address, ecc_syndrom, memory_wrapper_idx, ecc_data->is_critical);
+	if (has_block_id) {
+		block_id = le16_to_cpu(ecc_data->block_id);
+		gaudi2_print_event(hdev, event_type, !ecc_data->is_critical,
+			"ECC error detected. address: %#llx. Syndrome: %#llx. wrapper id %u. block id %#x. critical %u.",
+			ecc_address, ecc_syndrome, memory_wrapper_idx, block_id,
+			ecc_data->is_critical);
+	} else {
+		gaudi2_print_event(hdev, event_type, !ecc_data->is_critical,
+			"ECC error detected. address: %#llx. Syndrome: %#llx. wrapper id %u. critical %u.",
+			ecc_address, ecc_syndrome, memory_wrapper_idx, ecc_data->is_critical);
+	}
 
 	return !!ecc_data->is_critical;
 }
@@ -8277,11 +8306,11 @@ static int gaudi2_psoc_razwi_get_engines(struct gaudi2_razwi_info *razwi_info, u
 		eng_id[num_of_eng] = razwi_info[i].eng_id;
 		base[num_of_eng] = razwi_info[i].rtr_ctrl;
 		if (!num_of_eng)
-			str_size += snprintf(eng_name + str_size,
+			str_size += scnprintf(eng_name + str_size,
 						PSOC_RAZWI_ENG_STR_SIZE - str_size, "%s",
 						razwi_info[i].eng_name);
 		else
-			str_size += snprintf(eng_name + str_size,
+			str_size += scnprintf(eng_name + str_size,
 						PSOC_RAZWI_ENG_STR_SIZE - str_size, " or %s",
 						razwi_info[i].eng_name);
 		num_of_eng++;
@@ -9750,6 +9779,11 @@ static u16 event_id_to_engine_id(struct hl_device *hdev, u16 event_type)
 	return U16_MAX;
 }
 
+static void hl_eq_heartbeat_event_handle(struct hl_device *hdev)
+{
+	hdev->eq_heartbeat_received = true;
+}
+
 static void gaudi2_handle_eqe(struct hl_device *hdev, struct hl_eq_entry *eq_entry)
 {
 	struct gaudi2_device *gaudi2 = hdev->asic_specific;
@@ -10164,6 +10198,21 @@ static void gaudi2_handle_eqe(struct hl_device *hdev, struct hl_eq_entry *eq_ent
 		is_critical = true;
 		break;
 
+	case GAUDI2_EVENT_ARC_PWR_BRK_ENTRY:
+	case GAUDI2_EVENT_ARC_PWR_BRK_EXT:
+	case GAUDI2_EVENT_ARC_PWR_RD_MODE0:
+	case GAUDI2_EVENT_ARC_PWR_RD_MODE1:
+	case GAUDI2_EVENT_ARC_PWR_RD_MODE2:
+	case GAUDI2_EVENT_ARC_PWR_RD_MODE3:
+		error_count = GAUDI2_NA_EVENT_CAUSE;
+		dev_info_ratelimited(hdev->dev, "%s event received\n",
+					gaudi2_irq_map_table[event_type].name);
+		break;
+
+	case GAUDI2_EVENT_ARC_EQ_HEARTBEAT:
+		hl_eq_heartbeat_event_handle(hdev);
+		error_count = GAUDI2_NA_EVENT_CAUSE;
+		break;
 	default:
 		if (gaudi2_irq_map_table[event_type].valid) {
 			dev_err_ratelimited(hdev->dev, "Cannot find handler for event %d\n",
@@ -11309,6 +11358,7 @@ static int gaudi2_ack_mmu_page_fault_or_access_error(struct hl_device *hdev, u64
 static void gaudi2_get_msi_info(__le32 *table)
 {
 	table[CPUCP_EVENT_QUEUE_MSI_TYPE] = cpu_to_le32(GAUDI2_EVENT_QUEUE_MSIX_IDX);
+	table[CPUCP_EVENT_QUEUE_ERR_MSI_TYPE] = cpu_to_le32(GAUDI2_IRQ_NUM_EQ_ERROR);
 }
 
 static int gaudi2_map_pll_idx_to_fw_idx(u32 pll_idx)
