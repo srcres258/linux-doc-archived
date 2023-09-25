@@ -4065,8 +4065,14 @@ void read_extent_buffer(const struct extent_buffer *eb, void *dstv,
 {
 	void *eb_addr = btrfs_get_eb_addr(eb);
 
-	if (check_eb_range(eb, start, len))
+	if (check_eb_range(eb, start, len)) {
+		/*
+		 * Invalid range hit, reset the memory, so callers won't get
+		 * some random garbage for their uninitialzed memory.
+		 */
+		memset(dstv, 0, len);
 		return;
+	}
 
 	memcpy(dstv, eb_addr + start, len);
 }

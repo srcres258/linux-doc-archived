@@ -29,8 +29,7 @@ static struct ctl_table page_table_sysctl[] = {
 		.proc_handler	= proc_dointvec_minmax,
 		.extra1		= SYSCTL_ZERO,
 		.extra2		= SYSCTL_ONE,
-	},
-	{ }
+	}
 };
 
 static int __init page_table_register_sysctl(void)
@@ -62,8 +61,8 @@ static void __crst_table_upgrade(void *arg)
 
 	/* change all active ASCEs to avoid the creation of new TLBs */
 	if (current->active_mm == mm) {
-		S390_lowcore.user_asce = mm->context.asce;
-		__ctl_load(S390_lowcore.user_asce, 7, 7);
+		S390_lowcore.user_asce.val = mm->context.asce;
+		local_ctl_load(7, &S390_lowcore.user_asce);
 	}
 	__tlb_flush_local();
 }
